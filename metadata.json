@@ -1,0 +1,6 @@
+{
+  "name": "M&A Nexus",
+  "description": "A high-security Mergers & Acquisitions platform featuring AI-powered deal matching, secure data rooms, and end-to-end transaction management.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["AI Matching", "Secure Data Room", "Real-time Negotiation"]
+}

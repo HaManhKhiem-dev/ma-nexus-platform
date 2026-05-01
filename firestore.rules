@@ -1,0 +1,87 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // DEFAULT DENY
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- GLOBALS ---
+    function isSignedIn() { return request.auth != null; }
+    function isOwner(uid) { return isSignedIn() && request.auth.uid == uid; }
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function isEmailVerified() { return request.auth.token.email_verified == true; }
+
+    // --- USERS ---
+    function isValidUser(data) {
+      return data.uid == request.auth.uid &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.email == request.auth.token.email &&
+             data.role in ['buyer', 'seller', 'advisor', 'admin'] &&
+             data.kycStatus in ['not_started', 'pending', 'verified', 'rejected'];
+    }
+
+    match /users/{userId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn() && (isOwner(userId) || isEmailVerified()); 
+      allow create: if isSignedIn() && isValidId(userId) && userId == request.auth.uid && isValidUser(incoming());
+      allow update: if isSignedIn() && isOwner(userId) && isValidUser(incoming()) && 
+                    incoming().diff(existing()).affectedKeys().hasOnly(['name', 'country', 'avatarUrl', 'kycStatus']);
+    }
+
+    // --- COMPANIES ---
+    function isValidCompany(data) {
+      return data.name is string && data.name.size() > 0 &&
+             data.taxId is string && data.taxId.size() > 0 &&
+             data.ownerUid == request.auth.uid;
+    }
+
+    match /companies/{companyId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isEmailVerified() && isValidCompany(incoming());
+      allow update: if isSignedIn() && isOwner(existing().ownerUid) && isValidCompany(incoming());
+    }
+
+    // --- DEALS ---
+    function isValidDeal(data) {
+      return data.title is string && data.title.size() > 0 &&
+             data.sellerUid == request.auth.uid &&
+             data.status in ['draft', 'submitted', 'approved', 'published', 'negotiation', 'closed'];
+    }
+
+    match /deals/{dealId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isEmailVerified() && isValidDeal(incoming());
+      allow update: if isSignedIn() && isOwner(existing().sellerUid) && isValidDeal(incoming());
+      
+      // Data Room
+      match /dataroom/{fileId} {
+        allow read: if isSignedIn() && (isOwner(get(/databases/$(database)/documents/deals/$(dealId)).data.sellerUid) || 
+                       exists(/databases/$(database)/documents/ndas/$(request.auth.uid + "_" + dealId))); // Simplified NDA check
+        allow write: if isSignedIn() && isOwner(get(/databases/$(database)/documents/deals/$(dealId)).data.sellerUid);
+      }
+
+      // Offers
+      match /offers/{offerId} {
+        allow read: if isSignedIn() && (isOwner(incoming().buyerUid) || isOwner(existing().sellerUid));
+        allow create: if isSignedIn() && isEmailVerified() && incoming().buyerUid == request.auth.uid;
+      }
+
+      // Messages
+      match /messages/{messageId} {
+        allow read: if isSignedIn() && (resource.data.senderUid == request.auth.uid || resource.data.receiverUid == request.auth.uid);
+        allow create: if isSignedIn() && incoming().senderUid == request.auth.uid;
+      }
+    }
+
+    // --- NDAS ---
+    match /ndas/{ndaId} {
+      allow read: if isSignedIn() && (isOwner(existing().buyerUid) || isOwner(existing().sellerUid));
+      allow create: if isSignedIn() && incoming().buyerUid == request.auth.uid;
+    }
+  }
+}

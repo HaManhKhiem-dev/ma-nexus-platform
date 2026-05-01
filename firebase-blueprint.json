@@ -1,0 +1,127 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile and authentication data",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "country": { "type": "string" },
+        "role": { "type": "string", "enum": ["buyer", "seller", "advisor", "admin"] },
+        "kycStatus": { "type": "string", "enum": ["not_started", "pending", "verified", "rejected"] },
+        "avatarUrl": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "name", "email", "role"]
+    },
+    "Company": {
+      "title": "Company",
+      "description": "Detailed company profile and legal information",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "taxId": { "type": "string" },
+        "country": { "type": "string" },
+        "foundedYear": { "type": "integer" },
+        "industry": { "type": "string" },
+        "description": { "type": "string" },
+        "ownerUid": { "type": "string" },
+        "revenue3Year": { "type": "array", "items": { "type": "number" } },
+        "ebitda": { "type": "number" },
+        "netProfit": { "type": "number" },
+        "growthRate": { "type": "number" },
+        "isVerified": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "taxId", "ownerUid"]
+    },
+    "Deal": {
+      "title": "Deal",
+      "description": "A specific M&A opportunity or fundraising round",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "companyId": { "type": "string" },
+        "sellerUid": { "type": "string" },
+        "type": { "type": "string", "enum": ["sell_100", "sell_equity", "fundraising"] },
+        "valuation": { "type": "number" },
+        "equityOffered": { "type": "number" },
+        "status": { "type": "string", "enum": ["draft", "submitted", "approved", "published", "negotiation", "closed"] },
+        "summary": { "type": "string" },
+        "industry": { "type": "string" },
+        "location": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "companyId", "sellerUid", "status"]
+    },
+    "NDA": {
+      "title": "NDA",
+      "description": "Confidentiality agreement tracking between a buyer and a deal",
+      "type": "object",
+      "properties": {
+        "dealId": { "type": "string" },
+        "buyerUid": { "type": "string" },
+        "sellerUid": { "type": "string" },
+        "status": { "type": "string", "enum": ["requested", "signed", "rejected"] },
+        "signedAt": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["dealId", "buyerUid", "sellerUid", "status"]
+    },
+    "DataRoomFile": {
+      "title": "DataRoomFile",
+      "description": "Metadata for files stored in the secure data room",
+      "type": "object",
+      "properties": {
+        "dealId": { "type": "string" },
+        "name": { "type": "string" },
+        "category": { "type": "string", "enum": ["financial", "legal", "hr", "contracts", "technology"] },
+        "storagePath": { "type": "string" },
+        "uploadedBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["dealId", "name", "category", "storagePath"]
+    },
+    "Offer": {
+      "title": "Offer",
+      "description": "A binding or non-binding offer on a deal",
+      "type": "object",
+      "properties": {
+        "dealId": { "type": "string" },
+        "buyerUid": { "type": "string" },
+        "sellerUid": { "type": "string" },
+        "amount": { "type": "number" },
+        "equity": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "accepted", "countered", "rejected"] },
+        "message": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["dealId", "buyerUid", "sellerUid", "amount", "status"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "Secure chat message regarding a deal negotiation",
+      "type": "object",
+      "properties": {
+        "dealId": { "type": "string" },
+        "senderUid": { "type": "string" },
+        "receiverUid": { "type": "string" },
+        "text": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["dealId", "senderUid", "receiverUid", "text"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": { "schema": "User", "description": "Global user directory" },
+    "/companies/{companyId}": { "schema": "Company", "description": "Verified company profiles" },
+    "/deals/{dealId}": { "schema": "Deal", "description": "Central deal marketplace" },
+    "/ndas/{ndaId}": { "schema": "NDA", "description": "Confidential agreements mapping" },
+    "/deals/{dealId}/dataroom/{fileId}": { "schema": "DataRoomFile", "description": "Files within a deal's data room" },
+    "/deals/{dealId}/offers/{offerId}": { "schema": "Offer", "description": "Offers submitted for a deal" },
+    "/deals/{dealId}/messages/{messageId}": { "schema": "Message", "description": "Messages linked to a specific deal interaction" }
+  }
+}
