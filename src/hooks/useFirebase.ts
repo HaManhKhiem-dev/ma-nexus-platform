@@ -23,7 +23,7 @@ export function useDeals(status?: string) {
       q = query(q, where('status', '==', status));
     }
 
-    const unsubscribe = onSnapshot(collection(db, 'deals'), (snapshot) => {
+    const unsubscribe = onSnapshot(q, (snapshot) => {
       const dealData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setDeals(dealData);
       setLoading(false);
@@ -44,7 +44,7 @@ export function useDeal(dealId: string) {
   useEffect(() => {
     if (!dealId) return;
     const unsubscribe = onSnapshot(doc(db, 'deals', dealId), (doc) => {
-      setDeal({ id: doc.id, ...doc.data() });
+      setDeal(doc.exists() ? { id: doc.id, ...doc.data() } : null);
       setLoading(false);
     }, (error) => {
       handleFirestoreError(error, OperationType.GET, `deals/${dealId}`);

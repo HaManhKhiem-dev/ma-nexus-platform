@@ -17,3 +17,44 @@ body {
     @apply border-neutral-800;
   }
 }
+.input-dark {
+  width: 100%;
+  background: #020617;
+  border: 1px solid #1e293b;
+  padding: 1rem;
+  border-radius: 1rem;
+  font-size: 0.875rem;
+  color: white;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.input-dark:focus {
+  border-color: rgba(16, 185, 129, 0.7);
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.1);
+}
+.input-shell {
+  width: 100%;
+  background: #020617;
+  border: 1px solid #1e293b;
+  border-radius: 1rem;
+  padding: 1rem;
+  color: #ffffff;
+  font-size: 0.875rem;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.input-shell::placeholder {
+  color: #475569;
+}
+
+.input-shell:focus {
+  border-color: rgba(16, 185, 129, 0.7);
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.1);
+}
+
+.input-shell option {
+  background: #020617;
+  color: #ffffff;
+}

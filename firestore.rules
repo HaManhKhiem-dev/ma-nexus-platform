@@ -3,11 +3,6 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // DEFAULT DENY
-    match /{document=**} {
-      allow read, write: if false;
-    }
-
     // --- GLOBALS ---
     function isSignedIn() { return request.auth != null; }
     function isOwner(uid) { return isSignedIn() && request.auth.uid == uid; }
@@ -15,6 +10,20 @@ service cloud.firestore {
     function incoming() { return request.resource.data; }
     function existing() { return resource.data; }
     function isEmailVerified() { return request.auth.token.email_verified == true; }
+    function userProfile(uid) { return get(/databases/$(database)/documents/users/$(uid)).data; }
+    function hasRole(role) { return isSignedIn() && userProfile(request.auth.uid).role == role; }
+    function isAdmin() { return hasRole('admin'); }
+    function isKycVerified() { return isSignedIn() && userProfile(request.auth.uid).kycStatus == 'verified'; }
+    function hasSignedNda(dealId) {
+      return isSignedIn() &&
+             exists(/databases/$(database)/documents/ndas/$(request.auth.uid + "_" + dealId)) &&
+             get(/databases/$(database)/documents/ndas/$(request.auth.uid + "_" + dealId)).data.status == 'signed';
+    }
+
+    // DEFAULT DENY: Tất cả các truy cập phải qua các match cụ thể bên dưới
+    match /{document=**} {
+      allow read, write: if false;
+    }
 
     // --- USERS ---
     function isValidUser(data) {
@@ -27,10 +36,29 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow get: if isSignedIn();
-      allow list: if isSignedIn() && (isOwner(userId) || isEmailVerified()); 
+      allow list: if isAdmin(); 
       allow create: if isSignedIn() && isValidId(userId) && userId == request.auth.uid && isValidUser(incoming());
-      allow update: if isSignedIn() && isOwner(userId) && isValidUser(incoming()) && 
-                    incoming().diff(existing()).affectedKeys().hasOnly(['name', 'country', 'avatarUrl', 'kycStatus']);
+      allow update: if (isSignedIn() && isOwner(userId) && isValidUser(incoming()) && 
+                    incoming().diff(existing()).affectedKeys().hasOnly(['name', 'country', 'avatarUrl', 'kycStatus', 'role']) &&
+                    (!incoming().diff(existing()).affectedKeys().hasAny(['role']) || incoming().role in ['buyer', 'seller', 'advisor'] || existing().role == 'admin') &&
+                    (!incoming().diff(existing()).affectedKeys().hasAny(['kycStatus']) || incoming().kycStatus in ['not_started', 'pending'])) ||
+                    (isAdmin() &&
+                     incoming().diff(existing()).affectedKeys().hasOnly(['role', 'kycStatus', 'reviewedAt', 'reviewedBy']) &&
+                     (!incoming().diff(existing()).affectedKeys().hasAny(['role']) || incoming().role in ['buyer', 'seller', 'advisor', 'admin']) &&
+                     (!incoming().diff(existing()).affectedKeys().hasAny(['kycStatus']) || incoming().kycStatus in ['not_started', 'pending', 'verified', 'rejected']));
+    }
+
+    // --- KYC ---
+    match /kyc_profiles/{profileId} {
+      allow read: if isSignedIn() && (isOwner(resource.data.userId) || isAdmin());
+      allow create: if isSignedIn() && incoming().userId == request.auth.uid;
+      allow update: if (isSignedIn() && isOwner(existing().userId) && incoming().diff(existing()).affectedKeys().hasOnly(['documents', 'updatedAt'])) ||
+                    (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'reviewedAt', 'reviewedBy', 'adminNotes']));
+    }
+    
+    match /kyc_documents/{docId} {
+      allow read: if isSignedIn() && (isOwner(resource.data.userId) || isAdmin());
+      allow create: if isSignedIn() && incoming().userId == request.auth.uid;
     }
 
     // --- COMPANIES ---
@@ -42,46 +70,84 @@ service cloud.firestore {
 
     match /companies/{companyId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && isEmailVerified() && isValidCompany(incoming());
-      allow update: if isSignedIn() && isOwner(existing().ownerUid) && isValidCompany(incoming());
+      allow create: if isSignedIn() && isEmailVerified() && isKycVerified() && isValidCompany(incoming());
+      allow update: if isSignedIn() && isKycVerified() && isOwner(existing().ownerUid) && isValidCompany(incoming());
     }
 
     // --- DEALS ---
     function isValidDeal(data) {
       return data.title is string && data.title.size() > 0 &&
              data.sellerUid == request.auth.uid &&
-             data.status in ['draft', 'submitted', 'approved', 'published', 'negotiation', 'closed'];
+             data.status in ['draft', 'submitted', 'under_review', 'approved', 'published', 'in_negotiation', 'closed'];
+    }
+
+    function isValidDealAfterUpdate(data) {
+      return data.title is string && data.title.size() > 0 &&
+             data.status in ['draft', 'submitted', 'under_review', 'approved', 'published', 'in_negotiation', 'closed'];
     }
 
     match /deals/{dealId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn() && isEmailVerified() && isValidDeal(incoming());
-      allow update: if isSignedIn() && isOwner(existing().sellerUid) && isValidDeal(incoming());
+      allow read: if existing().status == 'published' || (isSignedIn() && (isOwner(existing().sellerUid) || isAdmin() || isKycVerified()));
+      allow create: if isSignedIn() && isEmailVerified() && isKycVerified() && (hasRole('seller') || hasRole('advisor') || isAdmin()) && isValidDeal(incoming());
+      allow update: if isSignedIn() && (
+        (isOwner(existing().sellerUid) && isKycVerified() && isValidDealAfterUpdate(incoming()) && incoming().status == existing().status) ||
+        (isAdmin() && isValidDealAfterUpdate(incoming()) && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'reviewedAt', 'reviewedBy', 'updatedAt']))
+      );
       
-      // Data Room
       match /dataroom/{fileId} {
-        allow read: if isSignedIn() && (isOwner(get(/databases/$(database)/documents/deals/$(dealId)).data.sellerUid) || 
-                       exists(/databases/$(database)/documents/ndas/$(request.auth.uid + "_" + dealId))); // Simplified NDA check
+        allow read: if isSignedIn() && isKycVerified() && (isOwner(get(/databases/$(database)/documents/deals/$(dealId)).data.sellerUid) || hasSignedNda(dealId));
         allow write: if isSignedIn() && isOwner(get(/databases/$(database)/documents/deals/$(dealId)).data.sellerUid);
       }
 
-      // Offers
       match /offers/{offerId} {
         allow read: if isSignedIn() && (isOwner(incoming().buyerUid) || isOwner(existing().sellerUid));
         allow create: if isSignedIn() && isEmailVerified() && incoming().buyerUid == request.auth.uid;
       }
 
-      // Messages
       match /messages/{messageId} {
         allow read: if isSignedIn() && (resource.data.senderUid == request.auth.uid || resource.data.receiverUid == request.auth.uid);
         allow create: if isSignedIn() && incoming().senderUid == request.auth.uid;
       }
     }
 
-    // --- NDAS ---
+    // --- NDAS (FIXED FOR QUERYING) ---
+    function isValidNda(data) {
+      return data.dealId is string &&
+             data.buyerUid is string &&
+             data.sellerUid is string &&
+             data.status in ['requested', 'signed', 'rejected'];
+    }
+
     match /ndas/{ndaId} {
-      allow read: if isSignedIn() && (isOwner(existing().buyerUid) || isOwner(existing().sellerUid));
-      allow create: if isSignedIn() && incoming().buyerUid == request.auth.uid;
+      // Cho phép đọc lẻ một document
+      allow get: if isSignedIn() && (isOwner(resource.data.buyerUid) || isOwner(resource.data.sellerUid));
+      
+      // FIX: Cho phép query danh sách (list) dựa trên filter UID
+      allow list: if isSignedIn() && (
+        (request.query.filters.sellerUid == request.auth.uid) || 
+        (request.query.filters.buyerUid == request.auth.uid)
+      );
+      
+      allow create: if isSignedIn() && isKycVerified() && incoming().buyerUid == request.auth.uid && ndaId == request.auth.uid + "_" + incoming().dealId && isValidNda(incoming());
+      
+      allow update: if isSignedIn() &&
+                    request.auth.uid == resource.data.sellerUid &&
+                    incoming().status in ['signed', 'rejected'] &&
+                    incoming().buyerUid == existing().buyerUid &&
+                    incoming().sellerUid == existing().sellerUid &&
+                    incoming().dealId == existing().dealId &&
+                    incoming().diff(existing()).affectedKeys().hasOnly(['status', 'reviewedAt', 'reviewedBy']);
+    }
+
+    // --- AUDIT & TRACKING ---
+    match /auditLogs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isSignedIn() && incoming().actorUid == request.auth.uid;
+    }
+
+    match /dataRoomEvents/{eventId} {
+      allow read: if isAdmin() || (isSignedIn() && resource.data.actorUid == request.auth.uid);
+      allow create: if isSignedIn() && isKycVerified() && incoming().actorUid == request.auth.uid;
     }
   }
 }
