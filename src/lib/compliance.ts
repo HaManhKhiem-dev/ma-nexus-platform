@@ -76,3 +76,56 @@ export function statusLabel(status?: string) {
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(' ');
 }
+
+/**
+ * Validate that a deal has all required information for NDA creation
+ * This prevents silent failures when creating NDAs with incomplete deal data
+ */
+export function isValidDealForNda(deal: any): { valid: boolean; errors: string[] } {
+  const errors: string[] = [];
+
+  if (!deal) {
+    errors.push('Deal object is missing');
+    return { valid: false, errors };
+  }
+
+  if (!deal.id || typeof deal.id !== 'string') {
+    errors.push('Deal ID is missing or invalid');
+  }
+
+  if (!deal.sellerUid || typeof deal.sellerUid !== 'string' || deal.sellerUid.trim().length === 0) {
+    errors.push('Deal seller information is missing');
+  }
+
+  if (!deal.title || typeof deal.title !== 'string' || deal.title.trim().length === 0) {
+    errors.push('Deal title is missing');
+  }
+
+  if (deal.status && !DEAL_STATUSES.includes(deal.status as DealStatus)) {
+    errors.push(`Deal status "${deal.status}" is invalid`);
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+  };
+}
+
+/**
+ * Check if user can request an NDA for a specific deal
+ * Validates both user permission and deal validity
+ */
+export function canRequestNdaForDeal(profile: any, deal: any, dealStatus = 'published'): { canRequest: boolean; reason?: string } {
+  // First check user permissions
+  if (!canRequestNda(profile, dealStatus)) {
+    return { canRequest: false, reason: 'KYC verified buyer/advisor account is required' };
+  }
+
+  // Then check deal validity
+  const dealValidation = isValidDealForNda(deal);
+  if (!dealValidation.valid) {
+    return { canRequest: false, reason: dealValidation.errors[0] || 'Deal information is incomplete' };
+  }
+
+  return { canRequest: true };
+}

@@ -3,11 +3,6 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // DEFAULT DENY
-  match /{document=**} {
-    allow read, write: if request.auth != null;
-  }
-
     // --- GLOBALS ---
     function isSignedIn() { return request.auth != null; }
     function isOwner(uid) { return isSignedIn() && request.auth.uid == uid; }
@@ -23,6 +18,11 @@ service cloud.firestore {
       return isSignedIn() &&
              exists(/databases/$(database)/documents/ndas/$(request.auth.uid + "_" + dealId)) &&
              get(/databases/$(database)/documents/ndas/$(request.auth.uid + "_" + dealId)).data.status == 'signed';
+    }
+
+    // DEFAULT DENY: Tất cả các truy cập phải qua các match cụ thể bên dưới
+    match /{document=**} {
+      allow read, write: if false;
     }
 
     // --- USERS ---
@@ -94,26 +94,23 @@ service cloud.firestore {
         (isAdmin() && isValidDealAfterUpdate(incoming()) && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'reviewedAt', 'reviewedBy', 'updatedAt']))
       );
       
-      // Data Room
       match /dataroom/{fileId} {
         allow read: if isSignedIn() && isKycVerified() && (isOwner(get(/databases/$(database)/documents/deals/$(dealId)).data.sellerUid) || hasSignedNda(dealId));
         allow write: if isSignedIn() && isOwner(get(/databases/$(database)/documents/deals/$(dealId)).data.sellerUid);
       }
 
-      // Offers
       match /offers/{offerId} {
         allow read: if isSignedIn() && (isOwner(incoming().buyerUid) || isOwner(existing().sellerUid));
         allow create: if isSignedIn() && isEmailVerified() && incoming().buyerUid == request.auth.uid;
       }
 
-      // Messages
       match /messages/{messageId} {
         allow read: if isSignedIn() && (resource.data.senderUid == request.auth.uid || resource.data.receiverUid == request.auth.uid);
         allow create: if isSignedIn() && incoming().senderUid == request.auth.uid;
       }
     }
 
-    // --- NDAS ---
+    // --- NDAS (FIXED FOR QUERYING) ---
     function isValidNda(data) {
       return data.dealId is string &&
              data.buyerUid is string &&
@@ -122,15 +119,24 @@ service cloud.firestore {
     }
 
     match /ndas/{ndaId} {
-      allow read: if isSignedIn() && (isOwner(existing().buyerUid) || isOwner(existing().sellerUid));
+      // Cho phép đọc lẻ một document
+      allow get: if isSignedIn() && (isOwner(resource.data.buyerUid) || isOwner(resource.data.sellerUid));
+      
+      // FIX: Cho phép query danh sách (list) dựa trên filter UID
+      allow list: if isSignedIn() && (
+        (request.query.filters.sellerUid == request.auth.uid) || 
+        (request.query.filters.buyerUid == request.auth.uid)
+      );
+      
       allow create: if isSignedIn() && isKycVerified() && incoming().buyerUid == request.auth.uid && ndaId == request.auth.uid + "_" + incoming().dealId && isValidNda(incoming());
+      
       allow update: if isSignedIn() &&
                     request.auth.uid == resource.data.sellerUid &&
-                    request.resource.data.status in ['signed', 'rejected'] &&
-                    request.resource.data.buyerUid == resource.data.buyerUid &&
-                    request.resource.data.sellerUid == resource.data.sellerUid &&
-                    request.resource.data.dealId == resource.data.dealId &&
-                    request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'reviewedAt', 'reviewedBy']);
+                    incoming().status in ['signed', 'rejected'] &&
+                    incoming().buyerUid == existing().buyerUid &&
+                    incoming().sellerUid == existing().sellerUid &&
+                    incoming().dealId == existing().dealId &&
+                    incoming().diff(existing()).affectedKeys().hasOnly(['status', 'reviewedAt', 'reviewedBy']);
     }
 
     // --- AUDIT & TRACKING ---

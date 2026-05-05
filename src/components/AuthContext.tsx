@@ -12,6 +12,7 @@ import {
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, onSnapshot, Unsubscribe } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
+import emailjs from '@emailjs/browser'; // Import thư viện EmailJS
 
 interface AuthContextType {
   user: User | null;
@@ -20,7 +21,11 @@ interface AuthContextType {
   signingIn: boolean;
   authError: string | null;
   signIn: () => Promise<void>;
+  signInWithGoogle: () => Promise<void>;
+  sendOtpEmail: (email: string, name: string) => Promise<boolean>;
+  verifyOtp: (email: string, otp: string) => Promise<boolean>;
   signInWithEmail: (email: string, pass: string) => Promise<void>;
+  signUpWithEmail: (email: string, pass: string, name: string, role: string) => Promise<void>;
   logout: () => Promise<void>;
   clearAuthError: () => void;
 }
@@ -38,7 +43,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let profileUnsubscribe: Unsubscribe | null = null;
 
     getRedirectResult(auth).catch((error) => {
-      console.error('Firebase redirect sign-in failed:', error);
       setAuthError(getAuthErrorMessage(error));
     });
 
@@ -48,7 +52,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         try {
           const userDoc = doc(db, 'users', user.uid);
           const userSnap = await getDoc(userDoc);
-
           if (!userSnap.exists()) {
             const newProfile = applyLocalProfilePatch(user.uid, buildDefaultProfile(user));
             await setDoc(userDoc, newProfile);
@@ -56,7 +59,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           } else {
             setProfile(applyLocalProfilePatch(user.uid, { ...buildDefaultProfile(user), ...userSnap.data() }));
           }
-
           if (profileUnsubscribe) profileUnsubscribe();
           profileUnsubscribe = onSnapshot(userDoc, (snapshot) => {
             if (snapshot.exists()) {
@@ -64,9 +66,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             }
           });
         } catch (error) {
-          console.error('Profile bootstrap failed:', error);
-          setProfile(applyLocalProfilePatch(user.uid, buildDefaultProfile(user)));
-          setAuthError('Đăng nhập Google thành công, nhưng chưa ghi/đọc được hồ sơ Firestore. Kiểm tra Firestore rules hoặc database ID.');
+          setAuthError('Lỗi kết nối Firestore.');
         }
       } else {
         setProfile(null);
@@ -81,30 +81,68 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  const signIn = async () => {
+  const signInWithGoogle = async () => {
     setSigningIn(true);
     setAuthError(null);
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({ prompt: 'select_account' });
-
     try {
       await signInWithPopup(auth, provider);
     } catch (error: any) {
-      console.error('Firebase popup sign-in failed:', error);
-
-      if (['auth/popup-blocked', 'auth/popup-closed-by-user', 'auth/cancelled-popup-request'].includes(error?.code)) {
-        try {
-          await signInWithRedirect(auth, provider);
-          return;
-        } catch (redirectError) {
-          console.error('Firebase redirect sign-in failed:', redirectError);
-          setAuthError(getAuthErrorMessage(redirectError));
-        }
+      if (['auth/popup-blocked', 'auth/popup-closed-by-user'].includes(error?.code)) {
+        await signInWithRedirect(auth, provider);
       } else {
         setAuthError(getAuthErrorMessage(error));
       }
-
       setSigningIn(false);
+    }
+  };
+
+  // --- HÀM GỬI OTP THẬT QUA EMAILJS ---
+  const sendOtpEmail = async (email: string, name: string) => {
+    setSigningIn(true);
+    setAuthError(null);
+    
+    // Tạo mã OTP ngẫu nhiên 6 số
+    const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString();
+    
+    try {
+      const templateParams = {
+        to_email: email,    // Đảm bảo trong EmailJS Dashboard bạn đã đổi To Email thành {{to_email}}
+        name: name,         // Khớp với {{name}} trong template
+        otp_code: generatedOtp, // Khớp với {{otp_code}} trong template
+        message: "Mã này sẽ hết hạn sau vài phút. Vui lòng không chia sẻ mã cho bất kỳ ai."
+      };
+
+      await emailjs.send(
+        'service_phw9oj8',   // Thay bằng Service ID của bạn
+        'template_oqlgg34',           // Template ID từ ảnh image_dae2b8.png
+        templateParams,
+        'w46v8wYfJuDQouqA7'    // Thay bằng Public Key từ EmailJS Account
+      );
+
+      // Lưu OTP vào localStorage để kiểm tra
+      window.localStorage.setItem('temp_otp', generatedOtp);
+      
+      setSigningIn(false);
+      return true; 
+    } catch (error) {
+      console.error("EmailJS Error:", error);
+      setAuthError("Không thể gửi mã xác nhận về email.");
+      setSigningIn(false);
+      return false;
+    }
+  };
+
+  // --- HÀM XÁC THỰC OTP ---
+  const verifyOtp = async (email: string, otp: string) => {
+    const savedOtp = window.localStorage.getItem('temp_otp');
+    if (otp === savedOtp) {
+      window.localStorage.removeItem('temp_otp');
+      return true;
+    } else {
+      setAuthError("Mã xác nhận không chính xác.");
+      return false;
     }
   };
 
@@ -112,30 +150,55 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSigningIn(true);
     setAuthError(null);
     try {
-      try {
-        await signInWithEmailAndPassword(auth, email, pass);
-      } catch (err: any) {
-        if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') {
-          // If user doesn't exist, create it automatically for testing
-          await createUserWithEmailAndPassword(auth, email, pass);
-        } else {
-          throw err;
-        }
-      }
+      await signInWithEmailAndPassword(auth, email, pass);
     } catch (error: any) {
-      console.error('Email sign-in failed:', error);
       setAuthError(getAuthErrorMessage(error));
     } finally {
       setSigningIn(false);
     }
   };
 
-  const logout = async () => {
-    await signOut(auth);
+  const signUpWithEmail = async (email: string, pass: string, name: string, role: string) => {
+    setSigningIn(true);
+    setAuthError(null);
+    try {
+      const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
+      const newUser = userCredential.user;
+
+      const userDoc = doc(db, 'users', newUser.uid);
+      const newProfile = {
+        uid: newUser.uid,
+        name: name || 'User',
+        email: email,
+        role: role,
+        country: 'Vietnam',
+        kycStatus: 'not_started',
+        createdAt: new Date().toISOString(),
+      };
+
+      await setDoc(userDoc, newProfile);
+      setProfile(newProfile);
+    } catch (error: any) {
+      setAuthError(getAuthErrorMessage(error));
+    } finally {
+      setSigningIn(false);
+    }
   };
 
+  const logout = () => signOut(auth);
+
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signingIn, authError, signIn, signInWithEmail, logout, clearAuthError: () => setAuthError(null) }}>
+    <AuthContext.Provider value={{ 
+      user, profile, loading, signingIn, authError, 
+      signIn: signInWithGoogle,
+      signInWithGoogle, 
+      sendOtpEmail, 
+      verifyOtp, 
+      signInWithEmail,
+      signUpWithEmail,
+      logout, 
+      clearAuthError: () => setAuthError(null) 
+    }}>
       {children}
     </AuthContext.Provider>
   );
@@ -143,12 +206,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
 export function useAuth() {
   const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
+  if (context === undefined) throw new Error('useAuth must be used within an AuthProvider');
   return context;
 }
 
+// ... (Các hàm helper bên dưới giữ nguyên)
 function buildDefaultProfile(user: User) {
   return {
     uid: user.uid,
@@ -172,26 +234,10 @@ function applyLocalProfilePatch(uid: string, profile: any) {
 
 function getAuthErrorMessage(error: unknown) {
   const code = typeof error === 'object' && error && 'code' in error ? String((error as { code?: string }).code) : '';
-
-  if (code === 'auth/unauthorized-domain') {
-    return 'Domain hiện tại chưa được thêm vào Firebase Authentication > Settings > Authorized domains. Hãy thêm localhost hoặc domain đang chạy app.';
-  }
-
-  if (code === 'auth/popup-blocked') {
-    return 'Trình duyệt đã chặn popup đăng nhập. Hệ thống sẽ thử chuyển sang redirect sign-in.';
-  }
-
-  if (code === 'auth/popup-closed-by-user') {
-    return 'Cửa sổ đăng nhập đã bị đóng trước khi hoàn tất.';
-  }
-
-  if (code === 'auth/operation-not-allowed') {
-    return 'Phương thức đăng nhập Email/Password chưa được bật trong Firebase Authentication > Sign-in method. Vui lòng vào Firebase Console bật nó lên.';
-  }
-
-  if (code === 'auth/email-already-in-use') {
-    return 'Email này đã được đăng ký trước đó (có thể qua Google). Hãy thử nhập đúng mật khẩu, hoặc dùng một email ảo khác (vd: test1@test.com) để đăng ký mới.';
-  }
-
-  return error instanceof Error ? error.message : 'Không đăng nhập được. Kiểm tra Firebase Authentication configuration.';
+  if (code === 'auth/unauthorized-domain') return 'Domain chưa được cấp phép trong Firebase.';
+  if (code === 'auth/email-already-in-use') return 'Email đã tồn tại.';
+  if (code === 'auth/weak-password') return 'Mật khẩu tối thiểu 6 ký tự.';
+  if (code === 'auth/invalid-email') return 'Email không hợp lệ.';
+  if (code === 'auth/user-not-found' || code === 'auth/wrong-password' || code === 'auth/invalid-credential') return 'Thông tin đăng nhập sai.';
+  return error instanceof Error ? error.message : 'Lỗi hệ thống.';
 }
