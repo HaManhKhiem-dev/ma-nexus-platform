@@ -1,5 +1,9 @@
 {
   "projects": {
-    "default": "gen-lang-client-0265174367"
-  }
+    "default": "gen-lang-client-0265174367",
+    "ma nexus": "gen-lang-client-0265174367",
+    "shared": "gen-lang-client-0265174367"
+  },
+  "targets": {},
+  "etags": {}
 }

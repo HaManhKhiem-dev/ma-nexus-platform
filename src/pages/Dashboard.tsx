@@ -107,31 +107,52 @@ setNdaError(error instanceof Error ? error.message : t('dashboard.errors.nda_upd
     }
   };
 
-  const updateDealStatus = async (dealId: string, status: 'under_review' | 'approved' | 'published' | 'closed') => {
-    if (!user || !isAdmin) return;
-    setNdaMessage(null);
-    setNdaError(null);
-    try {
-      await updateDoc(doc(db, 'deals', dealId), {
-        status,
-        reviewedAt: serverTimestamp(),
-        reviewedBy: user.uid,
-        updatedAt: serverTimestamp(),
-      });
-      await writeAuditLog({
-        actorUid: user.uid,
-        actorRole: profile?.role,
-        action: `deal_${status}`,
-        targetType: 'deal',
-        targetId: dealId,
-        dealId,
-      });
-      setNdaMessage(t('dashboard.messages.deal_moved', { status: dealStatusLabel(status) }));
-    } catch (error: any) {
-      console.error('Deal moderation failed:', error);
-      setNdaError(error instanceof Error ? error.message : t('dashboard.errors.deal_moderation_failed'));
-    }
-  };
+  const updateDealStatus = async (
+  dealId: string,
+  status: 'under_review' | 'approved' | 'published' | 'closed'
+) => {
+  if (!user || !isAdmin) return;
+
+  setNdaMessage(null);
+  setNdaError(null);
+
+  try {
+    await updateDoc(doc(db, 'deals', dealId), {
+      status,
+      reviewStatus: status === 'published' ? 'approved' : status,
+      reviewedAt: serverTimestamp(),
+      reviewedBy: user.uid,
+      updatedAt: serverTimestamp(),
+      ...(status === 'published'
+        ? {
+            publishedAt: serverTimestamp(),
+          }
+        : {}),
+    });
+
+    await writeAuditLog({
+      actorUid: user.uid,
+      actorRole: profile?.role,
+      action: `deal_${status}`,
+      targetType: 'deal',
+      targetId: dealId,
+      dealId,
+    });
+
+    setNdaMessage(
+      t('dashboard.messages.deal_moved', {
+        status: dealStatusLabel(status),
+      })
+    );
+  } catch (error: any) {
+    console.error('Deal moderation failed:', error);
+    setNdaError(
+      error instanceof Error
+        ? error.message
+        : t('dashboard.errors.deal_moderation_failed')
+    );
+  }
+};
 
   const updateKycStatus = async (targetUid: string, status: 'verified' | 'rejected') => {
     if (!user || !isAdmin) return;
@@ -345,7 +366,10 @@ setNdaError(error instanceof Error ? error.message : t('dashboard.errors.nda_upd
                         <p className="text-sm font-bold text-white uppercase tracking-tight">{deal.title}</p>
                         <p className="text-[10px] text-slate-500 font-medium uppercase tracking-widest mt-1">{deal.industry} • {deal.location}</p>
                       </div>
-                      <button onClick={() => updateDealStatus(deal.id, 'approved')} className="px-5 py-2.5 bg-emerald-500 rounded-xl text-[10px] font-black uppercase text-slate-950 hover:bg-emerald-400 transition-all shadow-lg shadow-emerald-500/20">
+                      <button
+                        onClick={() => updateDealStatus(deal.id, 'published')}
+                        className="px-5 py-2.5 bg-emerald-500 rounded-xl text-[10px] font-black uppercase text-slate-950 hover:bg-emerald-400 transition-all shadow-lg shadow-emerald-500/20"
+                      >
                         {t('dashboard.admin.review_asset')}
                       </button>
                     </div>
