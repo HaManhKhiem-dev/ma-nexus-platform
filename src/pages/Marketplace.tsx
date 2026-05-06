@@ -19,7 +19,7 @@ const sizes = ['All', '< $10M', '$10M - $25M', '$25M+'];
 
 export default function Marketplace() {
   
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { deals, loading } = useDeals('published');
   const { profile } = useAuth();
 
@@ -48,7 +48,11 @@ export default function Marketplace() {
   }, [sourceDeals, keyword, industry, geography, dealSize]);
   const scoredDeals = useMemo(() => {
   return filteredDeals.map((deal) => {
-    const result = scoreDealForInvestor(deal, profile?.investorPreference);
+    const result = scoreDealForInvestor(
+  deal,
+  profile?.investorPreference,
+  i18n.language === 'vi' ? 'vi' : 'en'
+);
 
     return {
       ...deal,
@@ -57,7 +61,7 @@ export default function Marketplace() {
       aiRisks: result.risks,
     };
   });
-}, [filteredDeals, profile?.investorPreference]);
+}, [filteredDeals, profile?.investorPreference, i18n.language]);
 
 const AI_RECOMMENDATION_THRESHOLD = 75;
 

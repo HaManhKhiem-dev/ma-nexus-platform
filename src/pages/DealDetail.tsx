@@ -82,7 +82,11 @@ export default function DealDetail() {
     });
 
   const investorAnalysis = useMemo(() => {
-    const result = scoreDealForInvestor(deal, profile?.investorPreference);
+    const result = scoreDealForInvestor(
+  deal,
+  profile?.investorPreference,
+  i18n.language === 'vi' ? 'vi' : 'en'
+);
 
     return {
       score: result.score,
@@ -97,7 +101,7 @@ export default function DealDetail() {
           ? t('deal_detail.investor_memo.moderate_fit')
           : t('deal_detail.investor_memo.low_fit'),
     };
-  }, [deal, profile?.investorPreference, t]);
+ }, [deal, profile?.investorPreference, t, i18n.language]);
 
   useEffect(() => {
   if (!deal) return;
