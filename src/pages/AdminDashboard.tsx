@@ -28,6 +28,7 @@ import {
   X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 
 interface PendingKycUser {
   id: string;
@@ -40,6 +41,7 @@ interface PendingKycUser {
 }
 
 export default function AdminDashboard() {
+  const { t } = useTranslation();
   const { user, profile } = useAuth();
 
   const [pendingUsers, setPendingUsers] = useState<PendingKycUser[]>([]);
@@ -131,7 +133,7 @@ export default function AdminDashboard() {
       setPendingUsers((prev) => prev.filter((item) => item.id !== userId));
     } catch (error) {
       console.error('Error reviewing KYC:', error);
-      alert('Failed to review KYC. Please check Firestore rules and admin permissions.');
+      alert(t('admin.review_error'));
     } finally {
       setProcessingId(null);
     }
@@ -169,16 +171,15 @@ export default function AdminDashboard() {
           </div>
 
           <p className="text-[10px] uppercase tracking-[0.35em] text-red-400 font-black mb-4">
-            Restricted Area
+            {t('admin.restricted_area')}
           </p>
 
           <h1 className="text-4xl md:text-5xl font-black tracking-tight text-white mb-5">
-            Access Denied
+            {t('admin.access_denied')}
           </h1>
 
           <p className="text-sm text-slate-400 leading-7">
-            Only compliance administrators can access this workspace. Your current profile does
-            not have moderation permission.
+            {t('admin.access_denied_description')}
           </p>
         </motion.div>
       </div>
@@ -196,18 +197,17 @@ export default function AdminDashboard() {
             <div className="inline-flex items-center gap-3 px-4 py-2 rounded-full bg-emerald-500/10 border border-emerald-500/20">
               <ShieldCheck size={14} className="text-emerald-400" />
               <span className="text-[10px] uppercase tracking-[0.3em] text-emerald-400 font-black">
-                Compliance Command Center
+                {t('admin.command_center')}
               </span>
             </div>
 
             <div>
               <h1 className="text-5xl md:text-7xl font-black tracking-tight text-white">
-                KYC Review
+                {t('admin.title')}
               </h1>
 
               <p className="mt-5 max-w-2xl text-sm md:text-base text-slate-400 leading-8">
-                Review identity verification requests, inspect submitted documents, approve
-                compliant users, and reject invalid profiles from a single secured workspace.
+                {t('admin.description')}
               </p>
             </div>
           </div>
@@ -224,14 +224,14 @@ export default function AdminDashboard() {
                 <RefreshCcw size={16} />
               )}
               <span className="text-[10px] uppercase tracking-widest font-black">
-                Refresh
+                {t('admin.refresh')}
               </span>
             </button>
 
             <div className="inline-flex items-center gap-3 px-6 py-4 rounded-2xl border border-emerald-500/20 bg-emerald-500/10">
               <Clock size={16} className="text-emerald-400" />
               <span className="text-[10px] uppercase tracking-widest font-black text-emerald-400">
-                Live Queue
+                {t('admin.live_queue')}
               </span>
             </div>
           </div>
@@ -241,23 +241,23 @@ export default function AdminDashboard() {
       <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <StatCard
           icon={<Clock size={20} />}
-          label="Pending Reviews"
+          label={t('admin.stats.pending_reviews')}
           value={pendingUsers.length}
-          helper="Users waiting for moderation"
+          helper={t('admin.stats.users_waiting')}
         />
 
         <StatCard
           icon={<FileText size={20} />}
-          label="Submitted Documents"
+          label={t('admin.stats.submitted_documents')}
           value={totalDocuments}
-          helper="Files attached to KYC requests"
+          helper={t('admin.stats.files_attached')}
         />
 
         <StatCard
           icon={<UserCheck size={20} />}
-          label="Ready To Inspect"
+          label={t('admin.stats.ready_to_inspect')}
           value={usersWithDocuments}
-          helper="Profiles with at least one document"
+          helper={t('admin.stats.profiles_with_documents')}
         />
       </section>
 
@@ -271,12 +271,11 @@ export default function AdminDashboard() {
 
               <div>
                 <h2 className="text-xl md:text-2xl font-black tracking-tight text-white">
-                  Pending KYC Reviews
+                  {t('admin.pending_kyc_reviews')}
                 </h2>
 
                 <p className="text-xs text-slate-500 mt-1">
-                  {filteredUsers.length} visible from {pendingUsers.length} pending request
-                  {pendingUsers.length === 1 ? '' : 's'}.
+                  {t('admin.pending_count', { visible: filteredUsers.length, total: pendingUsers.length })}
                 </p>
               </div>
             </div>
@@ -291,18 +290,18 @@ export default function AdminDashboard() {
             <input
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search name, email, role, country"
+              placeholder={t('admin.search_placeholder')}
               className="w-full bg-[#020617] border border-slate-800 py-4 pl-11 pr-4 rounded-2xl text-xs text-white placeholder:text-slate-600 focus:border-emerald-500/70 focus:ring-2 focus:ring-emerald-500/10 outline-none transition-all"
             />
           </div>
         </div>
 
         <div className="hidden lg:grid grid-cols-12 gap-4 px-6 py-4 bg-[#020617] text-[10px] uppercase tracking-[0.24em] font-black text-slate-600 border-b border-slate-800">
-          <div className="col-span-3">User</div>
-          <div className="col-span-3">Email</div>
-          <div className="col-span-2">Role</div>
-          <div className="col-span-2">Documents</div>
-          <div className="col-span-2 text-right">Actions</div>
+          <div className="col-span-3">{t('admin.table.user')}</div>
+          <div className="col-span-3">{t('admin.table.email')}</div>
+          <div className="col-span-2">{t('admin.table.role')}</div>
+          <div className="col-span-2">{t('admin.table.documents')}</div>
+          <div className="col-span-2 text-right">{t('admin.table.actions')}</div>
         </div>
 
         <div className="divide-y divide-slate-800">
@@ -388,6 +387,7 @@ function KycUserRow({
   onReject: () => void;
   onViewImage: (url: string) => void;
 }) {
+  const { t } = useTranslation();
   const isProcessing = processingId === user.id;
   const initials = getInitials(user.name || user.email);
 
@@ -405,42 +405,42 @@ function KycUserRow({
 
         <div className="min-w-0">
           <p className="text-sm font-bold text-white truncate">
-            {user.name || 'Unnamed User'}
+            {user.name || t('admin.unnamed_user')}
           </p>
 
           <div className="mt-2 inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-orange-500/10 border border-orange-500/20">
             <Clock size={11} className="text-orange-400" />
             <span className="text-[9px] uppercase tracking-widest font-black text-orange-300">
-              Pending
+              {t('admin.pending')}
             </span>
           </div>
         </div>
       </div>
 
       <div className="lg:col-span-3 min-w-0">
-        <LabelMobile>Email</LabelMobile>
+        <LabelMobile>{t('admin.table.email')}</LabelMobile>
         <p className="text-xs text-slate-400 break-all leading-6">
-          {user.email || 'No email'}
+          {user.email || t('admin.no_email')}
         </p>
       </div>
 
       <div className="lg:col-span-2">
-        <LabelMobile>Role & Country</LabelMobile>
+        <LabelMobile>{t('admin.role_country')}</LabelMobile>
 
         <div className="flex flex-wrap gap-2">
           <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-950 border border-slate-800 text-[10px] uppercase tracking-widest font-black text-slate-300">
-            {user.role || 'member'}
+            {user.role || t('admin.member')}
           </span>
 
           <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-950 border border-slate-800 text-[10px] uppercase tracking-widest font-black text-slate-400">
             <Globe2 size={11} />
-            {user.country || 'N/A'}
+            {user.country || t('common.not_applicable')}
           </span>
         </div>
       </div>
 
       <div className="lg:col-span-2">
-        <LabelMobile>Documents</LabelMobile>
+        <LabelMobile>{t('admin.table.documents')}</LabelMobile>
         <DocumentList documents={user.documents || []} onViewImage={onViewImage} />
       </div>
 
@@ -449,11 +449,11 @@ function KycUserRow({
           onClick={onApprove}
           disabled={isProcessing}
           className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 hover:bg-emerald-500 hover:text-[#020617] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-          title="Approve KYC"
+          title={t('admin.approve_kyc')}
         >
           {isProcessing ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle size={16} />}
           <span className="text-[10px] uppercase tracking-widest font-black">
-            Approve
+            {t('admin.approve')}
           </span>
         </button>
 
@@ -461,11 +461,11 @@ function KycUserRow({
           onClick={onReject}
           disabled={isProcessing}
           className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500 hover:text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-          title="Reject KYC"
+          title={t('admin.reject_kyc')}
         >
           {isProcessing ? <Loader2 size={16} className="animate-spin" /> : <XCircle size={16} />}
           <span className="text-[10px] uppercase tracking-widest font-black">
-            Reject
+            {t('admin.reject')}
           </span>
         </button>
       </div>
@@ -480,11 +480,13 @@ function DocumentList({
   documents: string[];
   onViewImage: (url: string) => void;
 }) {
+  const { t } = useTranslation();
+
   if (!documents.length) {
     return (
       <div className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-[10px] uppercase tracking-widest font-black text-slate-500">
         <FileText size={13} />
-        No Documents
+        {t('admin.no_documents')}
       </div>
     );
   }
@@ -499,7 +501,7 @@ function DocumentList({
               className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-[10px] uppercase tracking-widest font-black text-emerald-400"
             >
               <ShieldCheck size={13} />
-              Mock Verified
+              {t('admin.mock_verified')}
             </span>
           );
         }
@@ -510,11 +512,11 @@ function DocumentList({
               key={`${url}-${index}`}
               onClick={() => onViewImage(url)}
               className="group relative w-20 h-14 rounded-xl overflow-hidden border border-slate-700 hover:border-emerald-500 transition-all"
-              title="View document image"
+              title={t('admin.view_document_image')}
             >
               <img
                 src={url}
-                alt={`KYC Document ${index + 1}`}
+                alt={t('admin.kyc_document_alt', { index: index + 1 })}
                 className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300"
               />
 
@@ -534,7 +536,7 @@ function DocumentList({
             className="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-blue-500/10 border border-blue-500/20 text-[10px] uppercase tracking-widest font-black text-blue-300 hover:bg-blue-500 hover:text-white transition-all"
           >
             <Eye size={13} />
-            File {index + 1}
+            {t('admin.file_number', { index: index + 1 })}
           </a>
         );
       })}
@@ -569,6 +571,8 @@ function LoadingRows() {
 }
 
 function EmptyState({ hasSearch }: { hasSearch: boolean }) {
+  const { t } = useTranslation();
+
   return (
     <div className="p-12 text-center bg-[#0b1120]/70">
       <div className="w-16 h-16 mx-auto rounded-3xl bg-slate-900 border border-slate-800 flex items-center justify-center mb-5">
@@ -580,19 +584,21 @@ function EmptyState({ hasSearch }: { hasSearch: boolean }) {
       </div>
 
       <h3 className="text-xl font-black text-white">
-        {hasSearch ? 'No matching records' : 'Queue is clear'}
+        {hasSearch ? t('admin.no_matching_records') : t('admin.queue_clear')}
       </h3>
 
       <p className="text-sm text-slate-500 mt-3 max-w-md mx-auto leading-7">
         {hasSearch
-          ? 'No KYC profile matches your current search keyword.'
-          : 'There are no pending KYC requests at this time. A rare moment of peace in admin software.'}
+          ? t('admin.no_match_description')
+          : t('admin.queue_clear_description')}
       </p>
     </div>
   );
 }
 
 function ImageViewer({ image, onClose }: { image: string; onClose: () => void }) {
+  const { t } = useTranslation();
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -612,10 +618,10 @@ function ImageViewer({ image, onClose }: { image: string; onClose: () => void })
         <div className="flex items-center justify-between gap-4 mb-4">
           <div>
             <p className="text-[10px] uppercase tracking-[0.3em] text-emerald-400 font-black">
-              Document Preview
+              {t('admin.document_preview')}
             </p>
             <h3 className="text-xl font-black text-white mt-1">
-              KYC Submitted File
+              {t('admin.kyc_submitted_file')}
             </h3>
           </div>
 
@@ -630,7 +636,7 @@ function ImageViewer({ image, onClose }: { image: string; onClose: () => void })
         <div className="rounded-[28px] overflow-hidden border border-slate-800 bg-slate-950 shadow-2xl shadow-black/40">
           <img
             src={image}
-            alt="Full size KYC Document"
+            alt={t('admin.full_size_kyc_document')}
             className="w-full max-h-[78vh] object-contain bg-black"
           />
         </div>

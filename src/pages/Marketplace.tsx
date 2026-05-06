@@ -2,23 +2,35 @@ import React, { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useDeals } from '../hooks/useFirebase';
 import { formatCurrency } from '../lib/utils';
+import { scoreDealForInvestor } from '../lib/recommendation';
+import { useAuth } from '../components/AuthContext';
 import { sampleDeals } from '../lib/mockData';
 import { Search, Filter, MapPin, ChevronRight, ShieldCheck, Sparkles, TrendingUp, ArrowUpRight, ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { statusLabel } from '../lib/compliance';
+import { statusLabel, normalizeDealStatus } from '../lib/compliance';
+import { useTranslation } from 'react-i18next';
+
+
+const optionKey = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
 
 const industries = ['All', 'Technology', 'Healthcare', 'Logistics', 'Consumer', 'Financial Services'];
 const geographies = ['All', 'Vietnam', 'Singapore', 'Thailand', 'Indonesia', 'United States'];
 const sizes = ['All', '< $10M', '$10M - $25M', '$25M+'];
 
 export default function Marketplace() {
+  
+  const { t } = useTranslation();
   const { deals, loading } = useDeals('published');
+  const { profile } = useAuth();
+
   const [keyword, setKeyword] = useState('');
   const [industry, setIndustry] = useState('All');
   const [geography, setGeography] = useState('All');
   const [dealSize, setDealSize] = useState('All');
+  const [showAiOnly, setShowAiOnly] = useState(false);
 
   const sourceDeals = deals.length > 0 ? deals : sampleDeals;
+  const dealStatusLabel = (status?: string) => t(`statuses.deals.${normalizeDealStatus(status)}`, { defaultValue: statusLabel(status) });
   
   const filteredDeals = useMemo(() => {
     return sourceDeals.filter((deal) => {
@@ -34,7 +46,27 @@ export default function Marketplace() {
       return matchesKeyword && matchesIndustry && matchesGeography && matchesSize;
     });
   }, [sourceDeals, keyword, industry, geography, dealSize]);
+  const scoredDeals = useMemo(() => {
+  return filteredDeals.map((deal) => {
+    const result = scoreDealForInvestor(deal, profile?.investorPreference);
 
+    return {
+      ...deal,
+      aiScore: result.score,
+      aiReasons: result.reasons,
+      aiRisks: result.risks,
+    };
+  });
+}, [filteredDeals, profile?.investorPreference]);
+
+const AI_RECOMMENDATION_THRESHOLD = 75;
+
+const recommendedDeals = useMemo(() => {
+  return scoredDeals
+    .filter((deal) => Number(deal.aiScore || 0) >= AI_RECOMMENDATION_THRESHOLD)
+    .sort((a, b) => Number(b.aiScore || 0) - Number(a.aiScore || 0));
+}, [scoredDeals]);
+const displayedDeals = showAiOnly ? recommendedDeals : scoredDeals;
   if (loading && deals.length === 0) {
     return (
       <div className="space-y-12 animate-pulse p-8">
@@ -83,11 +115,11 @@ export default function Marketplace() {
             className="flex items-center gap-2 text-emerald-400"
           >
             <Sparkles size={14} />
-            <p className="text-[10px] uppercase tracking-[0.4em] font-black">Capital Market Portal</p>
+            <p className="text-[10px] uppercase tracking-[0.4em] font-black">{t('marketplace.badge')}</p>
           </motion.div>
-          <h2 className="text-6xl md:text-8xl font-bold tracking-tighter text-white">Marketplace</h2>
+          <h2 className="text-6xl md:text-8xl font-bold tracking-tighter text-white">{t('marketplace.title')}</h2>
           <p className="text-lg text-slate-400 max-w-2xl font-light leading-relaxed">
-            Hệ thống niêm yết tài sản số hóa. Khám phá các cơ hội M&A được bảo mật và định giá theo thời gian thực.
+            {t('marketplace.description')}
           </p>
         </div>
         
@@ -98,7 +130,7 @@ export default function Marketplace() {
               value={keyword}
               onChange={(e) => setKeyword(e.target.value)}
               className="glass-input w-full md:w-96 bg-slate-900/40 border border-slate-800 py-5 pl-14 pr-6 rounded-2xl text-sm text-white placeholder:text-slate-600 focus:outline-none focus:border-emerald-500/50 transition-all"
-              placeholder="Search assets, industries..."
+              placeholder={t('marketplace.search_placeholder')}
             />
           </div>
           <button className="p-5 bg-slate-900/40 border border-slate-800 rounded-2xl text-slate-400 hover:text-white hover:border-slate-600 transition-all">
@@ -110,9 +142,9 @@ export default function Marketplace() {
       {/* Filter Grid */}
       <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          ['Industry', industry, setIndustry, industries],
-          ['Geography', geography, setGeography, geographies],
-          ['Deal Size', dealSize, setDealSize, sizes],
+          [t('marketplace.filters.industry'), industry, setIndustry, industries],
+          [t('marketplace.filters.geography'), geography, setGeography, geographies],
+          [t('marketplace.filters.deal_size'), dealSize, setDealSize, sizes],
         ].map(([label, value, setter, options]) => (
           <div key={label as string} className="bg-slate-900/40 border border-slate-800/60 p-5 rounded-2xl space-y-3 hover:border-emerald-500/30 transition-all group relative">
             <span className="text-[9px] uppercase tracking-[0.25em] text-slate-500 font-black group-hover:text-emerald-500 transition-colors ml-1">
@@ -125,7 +157,7 @@ export default function Marketplace() {
                 className="custom-select-option w-full bg-transparent text-[13px] text-white font-bold appearance-none cursor-pointer focus:outline-none relative z-10 pr-8"
               >
                 {(options as string[]).map((opt) => (
-                  <option key={opt} value={opt}>{opt}</option>
+                  <option key={opt} value={opt}>{t(`marketplace.options.${optionKey(opt)}`, { defaultValue: opt })}</option>
                 ))}
               </select>
               <ChevronDown size={14} className="absolute right-0 text-slate-600 group-hover:text-emerald-500 transition-colors" />
@@ -133,35 +165,56 @@ export default function Marketplace() {
           </div>
         ))}
         
-        <div className="bg-emerald-500/5 border border-emerald-500/20 p-5 rounded-2xl flex items-center gap-4 group hover:bg-emerald-500/10 transition-all">
-          <div className="p-3 bg-emerald-500/20 rounded-xl text-emerald-400 group-hover:scale-110 transition-transform">
-            <Sparkles size={20} />
-          </div>
-          <div>
-            <p className="text-[10px] uppercase tracking-widest text-emerald-500 font-black">AI Recommendations</p>
-            <p className="text-xs text-white/70 font-medium">8 Opportunities found</p>
-          </div>
-        </div>
+        <button
+  type="button"
+  onClick={() => setShowAiOnly((prev) => !prev)}
+  className={`bg-emerald-500/5 border p-5 rounded-2xl flex items-center gap-4 group transition-all text-left ${
+    showAiOnly
+      ? 'border-emerald-500/50 bg-emerald-500/10 shadow-lg shadow-emerald-500/10'
+      : 'border-emerald-500/20 hover:bg-emerald-500/10'
+  }`}
+>
+  <div className="p-3 bg-emerald-500/20 rounded-xl text-emerald-400 group-hover:scale-110 transition-transform">
+    <Sparkles size={20} />
+  </div>
+
+  <div>
+    <p className="text-[10px] uppercase tracking-widest text-emerald-500 font-black">
+      {t('marketplace.ai_recommendations')}
+    </p>
+
+    <p className="text-xs text-white/70 font-medium">
+      {showAiOnly
+        ? t('marketplace.ai_filter_active', {
+            count: recommendedDeals.length,
+            defaultValue: `Showing ${recommendedDeals.length} AI-matched opportunities`,
+          })
+        : t('marketplace.opportunities_found', {
+            count: recommendedDeals.length,
+          })}
+    </p>
+  </div>
+</button>
       </section>
 
       {/* Deals List */}
       <div className="space-y-4">
         {/* Table Header */}
         <div className="hidden lg:grid grid-cols-12 px-10 py-4 text-[10px] uppercase tracking-[0.3em] font-black text-slate-600">
-          <span className="col-span-5">Strategic Asset Name</span>
-          <span className="col-span-2">Core Metrics</span>
-          <span className="col-span-2">Target Valuation</span>
-          <span className="col-span-2 text-center">AI Compatibility</span>
-          <span className="col-span-1 text-right">Action</span>
+          <span className="col-span-5">{t('marketplace.table.asset_name')}</span>
+          <span className="col-span-2">{t('marketplace.table.core_metrics')}</span>
+          <span className="col-span-2">{t('marketplace.table.target_valuation')}</span>
+          <span className="col-span-2 text-center">{t('marketplace.table.ai_compatibility')}</span>
+          <span className="col-span-1 text-right">{t('marketplace.table.action')}</span>
         </div>
 
         <AnimatePresence mode="popLayout">
-          {filteredDeals.length === 0 ? (
+          {displayedDeals.length === 0 ? (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-20 text-center bg-slate-900/10 border border-slate-800/50 rounded-3xl text-slate-500 font-light italic">
-              No matching assets were identified in the current quarter.
+              {t('marketplace.empty')}
             </motion.div>
           ) : (
-            filteredDeals.map((deal, idx) => (
+            displayedDeals.map((deal, idx) => (
               <motion.div
                 key={deal.id}
                 layout
@@ -181,7 +234,7 @@ export default function Marketplace() {
                           {deal.industry}
                         </span>
                         <span className="px-3 py-1 bg-emerald-500/10 rounded-lg text-[9px] font-bold text-emerald-400 border border-emerald-500/20 uppercase tracking-widest">
-                          {statusLabel(deal.status || 'published')}
+                          {dealStatusLabel(deal.status || 'published')}
                         </span>
                       </div>
                       <div>
@@ -190,6 +243,18 @@ export default function Marketplace() {
                         </h3>
                         <div className="flex items-center gap-2 mt-2 text-slate-500 font-medium text-xs">
                           <MapPin size={12} className="text-emerald-500" /> {deal.location}
+                          {deal.aiReasons?.length > 0 && (
+                          <div className="flex flex-wrap gap-2 mt-4">
+                            {deal.aiReasons.slice(0, 2).map((reason: string) => (
+                              <span
+                                key={reason}
+                                className="px-2.5 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-[9px] text-emerald-300 font-bold"
+                              >
+                                {reason}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                         </div>
                       </div>
                     </div>
@@ -197,22 +262,22 @@ export default function Marketplace() {
                     {/* Metrics */}
                     <div className="lg:col-span-2 space-y-3">
                       <div>
-                        <p className="text-[9px] uppercase tracking-widest text-slate-600 font-black mb-1">Revenue (TTM)</p>
+                        <p className="text-[9px] uppercase tracking-widest text-slate-600 font-black mb-1">{t('marketplace.revenue_ttm')}</p>
                         <p className="text-sm font-mono text-white/90">
-                          {deal.revenue?.[2] ? formatCurrency(Number(deal.revenue[2])) : 'Confidential'}
+                          {deal.revenue?.[2] ? formatCurrency(Number(deal.revenue[2])) : t('common.confidential')}
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
                          <div className="h-1 w-1 rounded-full bg-emerald-500"></div>
-                         <p className="text-[10px] text-slate-500 font-bold uppercase tracking-tighter">EBITDA: {deal.ebitda ? formatCurrency(Number(deal.ebitda)) : 'N/A'}</p>
+                         <p className="text-[10px] text-slate-500 font-bold uppercase tracking-tighter">{t('marketplace.ebitda_value', { value: deal.ebitda ? formatCurrency(Number(deal.ebitda)) : t('common.not_applicable') })}</p>
                       </div>
                     </div>
 
                     {/* Valuation */}
                     <div className="lg:col-span-2">
-                      <p className="text-[9px] uppercase tracking-widest text-slate-600 font-black mb-1">Indicative Value</p>
+                      <p className="text-[9px] uppercase tracking-widest text-slate-600 font-black mb-1">{t('marketplace.indicative_value')}</p>
                       <p className="text-2xl font-bold text-white tracking-tighter">
-                        {deal.valuation ? formatCurrency(Number(deal.valuation)) : 'TBA'}
+                        {deal.valuation ? formatCurrency(Number(deal.valuation)) : t('common.tba')}
                       </p>
                     </div>
 
@@ -225,16 +290,24 @@ export default function Marketplace() {
                             cx="32" cy="32" r="28" fill="none" stroke="currentColor" strokeWidth="4" 
                             strokeDasharray={176} 
                             initial={{ strokeDashoffset: 176 }}
-                            animate={{ strokeDashoffset: 176 - (176 * (deal.matchScore || 78)) / 100 }}
+                            animate={{ strokeDashoffset: 176 - (176 * (deal.aiScore ?? deal.matchScore ?? 78)) / 100 }}
                             transition={{ duration: 1.5, ease: "easeOut" }}
                             className="text-emerald-500" 
                           />
                         </svg>
-                        <span className="absolute text-xs font-mono font-black text-white">{deal.matchScore || 78}%</span>
+                        <span className="absolute text-xs font-mono font-black text-white">{deal.aiScore ?? deal.matchScore ?? 78}%</span>
                       </div>
                       <div className="flex items-center gap-1.5 text-emerald-500">
                          <TrendingUp size={12} />
-                         <span className="text-[9px] font-black uppercase tracking-tighter">High Affinity</span>
+                         <span className="text-[9px] font-black uppercase tracking-tighter">
+                                {Number(deal.aiScore || 0) >= 85
+                                  ? t('marketplace.fit.strong', { defaultValue: 'Strong Fit' })
+                                  : Number(deal.aiScore || 0) >= 70
+                                  ? t('marketplace.fit.good', { defaultValue: 'Good Fit' })
+                                  : Number(deal.aiScore || 0) >= 55
+                                  ? t('marketplace.fit.moderate', { defaultValue: 'Moderate Fit' })
+                                  : t('marketplace.fit.low', { defaultValue: 'Low Fit' })}
+                              </span>
                       </div>
                     </div>
 
@@ -259,7 +332,7 @@ export default function Marketplace() {
       <footer className="pt-10 flex justify-center">
          <div className="px-8 py-4 bg-slate-900/30 border border-slate-800/50 rounded-full flex items-center gap-4 backdrop-blur-sm">
             <ShieldCheck size={16} className="text-emerald-500" />
-            <span className="text-[10px] text-slate-500 uppercase tracking-[0.4em] font-black">Forensic Watermarking Enabled for all Data Rooms</span>
+            <span className="text-[10px] text-slate-500 uppercase tracking-[0.4em] font-black">{t('marketplace.watermarking_enabled')}</span>
          </div>
       </footer>
     </div>

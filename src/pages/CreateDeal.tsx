@@ -33,6 +33,9 @@ import { useAuth } from '../components/AuthContext';
 import { dealStages } from '../lib/mockData';
 import { canCreateDeal } from '../lib/compliance';
 import { writeAuditLog } from '../lib/audit';
+import { useTranslation } from 'react-i18next';
+
+const optionKey = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
 
 const industries = [
   'Technology',
@@ -52,42 +55,12 @@ const documents = [
   'Shareholder list'
 ];
 
-const steps = [
-  {
-    id: 1,
-    title: 'Legal Entity',
-    shortTitle: 'Legal',
-    description: 'Company registration, ownership, and legal identity.',
-    icon: Landmark
-  },
-  {
-    id: 2,
-    title: 'Operations',
-    shortTitle: 'Market',
-    description: 'Deal title, industry, location, products, and target markets.',
-    icon: Factory
-  },
-  {
-    id: 3,
-    title: 'Financials',
-    shortTitle: 'Finance',
-    description: 'Revenue, EBITDA, profit, and growth indicators.',
-    icon: BarChart3
-  },
-  {
-    id: 4,
-    title: 'Deal Terms',
-    shortTitle: 'Terms',
-    description: 'Transaction type, valuation, equity, and strategic rationale.',
-    icon: BadgeDollarSign
-  },
-  {
-    id: 5,
-    title: 'Documents',
-    shortTitle: 'Docs',
-    description: 'Diligence package required for admin moderation.',
-    icon: FolderLock
-  }
+const stepDefinitions = [
+  { id: 1, key: 'legal_entity', icon: Landmark },
+  { id: 2, key: 'operations', icon: Factory },
+  { id: 3, key: 'financials', icon: BarChart3 },
+  { id: 4, key: 'deal_terms', icon: BadgeDollarSign },
+  { id: 5, key: 'documents', icon: FolderLock }
 ];
 
 type DealFormData = {
@@ -143,6 +116,7 @@ const initialFormData: DealFormData = {
 };
 
 export default function CreateDeal() {
+  const { t } = useTranslation();
   const { user, profile } = useAuth();
   const navigate = useNavigate();
 
@@ -151,6 +125,16 @@ export default function CreateDeal() {
   const [formData, setFormData] = useState<DealFormData>(initialFormData);
 
   const createAllowed = canCreateDeal(profile);
+  const steps = useMemo(() => stepDefinitions.map((item) => ({
+    ...item,
+    title: t(`create_deal.steps.${item.key}.title`),
+    shortTitle: t(`create_deal.steps.${item.key}.short_title`),
+    description: t(`create_deal.steps.${item.key}.description`)
+  })), [t]);
+  const translatedIndustries = useMemo(() => industries.map((item) => ({
+    value: item,
+    label: t(`create_deal.industries.${optionKey(item)}`)
+  })), [t]);
   const activeStep = steps[step - 1];
 
   const completion = useMemo(() => {
@@ -201,12 +185,12 @@ export default function CreateDeal() {
     event.preventDefault();
 
     if (!user) {
-      alert('Please sign in before submitting a deal.');
+      alert(t('create_deal.alerts.sign_in_required'));
       return;
     }
 
     if (!canCreateDeal(profile)) {
-      alert('KYC verified seller or advisor account is required before creating a deal.');
+      alert(t('create_deal.alerts.kyc_seller_required'));
       return;
     }
 
@@ -306,7 +290,7 @@ export default function CreateDeal() {
       navigate('/dashboard');
     } catch (error) {
       console.error('Submission failed:', error);
-      alert('Submission failed. Please check Firestore rules and required fields.');
+      alert(t('create_deal.alerts.submission_failed'));
     } finally {
       setLoading(false);
     }
@@ -327,18 +311,17 @@ export default function CreateDeal() {
             <div className="inline-flex items-center gap-3 px-4 py-2 rounded-full bg-emerald-500/10 border border-emerald-500/20">
               <FileSignature size={15} className="text-emerald-400" />
               <span className="text-[10px] uppercase tracking-[0.3em] text-emerald-400 font-black">
-                Seller Workflow
+                {t('create_deal.badge')}
               </span>
             </div>
 
             <div>
               <h1 className="text-5xl md:text-7xl font-black tracking-tight text-white">
-                Submit Deal
+                {t('create_deal.title')}
               </h1>
 
               <p className="mt-5 max-w-2xl text-sm md:text-base text-slate-400 leading-8">
-                Build a moderation-ready M&A profile with company legal data, market context,
-                financial indicators, transaction terms, and diligence documents.
+                {t('create_deal.description')}
               </p>
             </div>
           </div>
@@ -347,7 +330,7 @@ export default function CreateDeal() {
             <div className="flex items-center justify-between gap-4">
               <div>
                 <p className="text-[10px] uppercase tracking-[0.25em] text-emerald-400 font-black">
-                  Completion
+                  {t('create_deal.completion')}
                 </p>
                 <p className="text-4xl font-black text-white mt-2">
                   {completion}%
@@ -368,7 +351,7 @@ export default function CreateDeal() {
             </div>
 
             <p className="text-xs text-slate-400 leading-6 mt-4">
-              Draft quality increases approval speed. A stunningly rare case where filling a form properly helps.
+              {t('create_deal.completion_note')}
             </p>
           </div>
         </div>
@@ -380,10 +363,10 @@ export default function CreateDeal() {
             <div className="flex items-center justify-between mb-5">
               <div>
                 <p className="text-[10px] uppercase tracking-[0.25em] text-slate-500 font-black">
-                  Progress
+                  {t('create_deal.progress')}
                 </p>
                 <h2 className="text-xl font-black text-white mt-2">
-                  Deal Builder
+                  {t('create_deal.deal_builder')}
                 </h2>
               </div>
 
@@ -412,10 +395,10 @@ export default function CreateDeal() {
               <ShieldAlert size={18} className="text-orange-400 mt-0.5 shrink-0" />
               <div>
                 <p className="text-[10px] uppercase tracking-[0.25em] text-orange-300 font-black">
-                  Compliance Note
+                  {t('create_deal.compliance_note')}
                 </p>
                 <p className="text-xs text-orange-100/70 leading-6 mt-2">
-                  Deal submission requires verified KYC, seller or advisor permission, and admin review before publication.
+                  {t('create_deal.compliance_text')}
                 </p>
               </div>
             </div>
@@ -433,7 +416,7 @@ export default function CreateDeal() {
 
                   <div>
                     <p className="text-[10px] uppercase tracking-[0.25em] text-emerald-400 font-black">
-                      Step {step} of 5
+                      {t('create_deal.step_of_total', { step, total: 5 })}
                     </p>
 
                     <h2 className="text-2xl md:text-3xl font-black text-white mt-2">
@@ -479,7 +462,7 @@ export default function CreateDeal() {
                   {step === 1 && (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                       <Field
-                        label="Legal Entity Name"
+                        label={t('create_deal.fields.legal_entity_name')}
                         value={formData.companyName}
                         onChange={(value) => setField('companyName', value)}
                         required
@@ -487,7 +470,7 @@ export default function CreateDeal() {
                       />
 
                       <Field
-                        label="Tax ID / Registration Number"
+                        label={t('create_deal.fields.tax_id')}
                         value={formData.taxId}
                         onChange={(value) => setField('taxId', value)}
                         required
@@ -495,7 +478,7 @@ export default function CreateDeal() {
                       />
 
                       <Field
-                        label="Country of Registration"
+                        label={t('create_deal.fields.country_registration')}
                         value={formData.country}
                         onChange={(value) => setField('country', value)}
                         required
@@ -503,7 +486,7 @@ export default function CreateDeal() {
                       />
 
                       <Field
-                        label="Founded Year"
+                        label={t('create_deal.fields.founded_year')}
                         type="number"
                         value={formData.foundedYear}
                         onChange={(value) => setField('foundedYear', value)}
@@ -511,7 +494,7 @@ export default function CreateDeal() {
                       />
 
                       <Field
-                        label="Founder Ownership %"
+                        label={t('create_deal.fields.founder_ownership')}
                         type="number"
                         value={formData.founderOwnership}
                         onChange={(value) => setField('founderOwnership', value)}
@@ -519,7 +502,7 @@ export default function CreateDeal() {
                       />
 
                       <Field
-                        label="Investor Ownership %"
+                        label={t('create_deal.fields.investor_ownership')}
                         type="number"
                         value={formData.investorOwnership}
                         onChange={(value) => setField('investorOwnership', value)}
@@ -527,7 +510,7 @@ export default function CreateDeal() {
                       />
 
                       <Field
-                        label="ESOP Ownership %"
+                        label={t('create_deal.fields.esop_ownership')}
                         type="number"
                         value={formData.esopOwnership}
                         onChange={(value) => setField('esopOwnership', value)}
@@ -539,7 +522,7 @@ export default function CreateDeal() {
                   {step === 2 && (
                     <div className="space-y-5">
                       <Field
-                        label="Deal Title"
+                        label={t('create_deal.fields.deal_title')}
                         value={formData.title}
                         onChange={(value) => setField('title', value)}
                         required
@@ -548,15 +531,15 @@ export default function CreateDeal() {
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                         <SelectField
-                          label="Industry"
+                          label={t('create_deal.fields.industry')}
                           value={formData.industry}
                           onChange={(value) => setField('industry', value)}
-                          options={industries}
+                          options={translatedIndustries}
                           required
                         />
 
                         <Field
-                          label="Location"
+                          label={t('create_deal.fields.location')}
                           value={formData.location}
                           onChange={(value) => setField('location', value)}
                           required
@@ -565,13 +548,13 @@ export default function CreateDeal() {
                       </div>
 
                       <TextArea
-                        label="Products / Services"
+                        label={t('create_deal.fields.products_services')}
                         value={formData.products}
                         onChange={(value) => setField('products', value)}
                       />
 
                       <TextArea
-                        label="Target Markets"
+                        label={t('create_deal.fields.target_markets')}
                         value={formData.targetMarkets}
                         onChange={(value) => setField('targetMarkets', value)}
                       />
@@ -584,11 +567,11 @@ export default function CreateDeal() {
                         <div className="flex items-center justify-between gap-4 mb-5">
                           <div>
                             <p className="text-[10px] uppercase font-black tracking-[0.25em] text-slate-500">
-                              Revenue
+                              {t('create_deal.fields.revenue')}
                             </p>
 
                             <h3 className="text-lg font-black text-white mt-2">
-                              Last 3 Years
+                              {t('create_deal.last_three_years')}
                             </h3>
                           </div>
 
@@ -599,7 +582,7 @@ export default function CreateDeal() {
                           {formData.revenue.map((rev, index) => (
                             <label key={index} className="block space-y-2">
                               <span className="text-[10px] uppercase font-black tracking-widest text-slate-500">
-                                Year {index + 1}
+                                {t('create_deal.year_number', { year: index + 1 })}
                               </span>
 
                               <input
@@ -628,7 +611,7 @@ export default function CreateDeal() {
                         />
 
                         <Field
-                          label="Net Profit"
+                          label={t('create_deal.fields.net_profit')}
                           type="number"
                           value={formData.netProfit}
                           onChange={(value) => setField('netProfit', value)}
@@ -636,7 +619,7 @@ export default function CreateDeal() {
                         />
 
                         <Field
-                          label="Growth Rate %"
+                          label={t('create_deal.fields.growth_rate')}
                           type="number"
                           value={formData.growthRate}
                           onChange={(value) => setField('growthRate', value)}
@@ -649,19 +632,19 @@ export default function CreateDeal() {
                   {step === 4 && (
                     <div className="space-y-5">
                       <SelectField
-                        label="Deal Type"
+                        label={t('create_deal.fields.deal_type')}
                         value={formData.dealType}
                         onChange={(value) => setField('dealType', value)}
                         options={[
-                          { label: 'Sell 100%', value: 'sell_100' },
-                          { label: 'Sell Equity Stake', value: 'sell_equity' },
-                          { label: 'Fundraising', value: 'fundraising' }
+                          { label: t('create_deal.deal_types.sell_100'), value: 'sell_100' },
+                          { label: t('create_deal.deal_types.sell_equity'), value: 'sell_equity' },
+                          { label: t('create_deal.deal_types.fundraising'), value: 'fundraising' }
                         ]}
                       />
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                         <Field
-                          label="Valuation"
+                          label={t('create_deal.fields.valuation')}
                           type="number"
                           value={formData.valuation}
                           onChange={(value) => setField('valuation', value)}
@@ -669,7 +652,7 @@ export default function CreateDeal() {
                         />
 
                         <Field
-                          label="Equity Offered %"
+                          label={t('create_deal.fields.equity_offered')}
                           type="number"
                           value={formData.equityOffered}
                           onChange={(value) => setField('equityOffered', value)}
@@ -678,19 +661,19 @@ export default function CreateDeal() {
                       </div>
 
                       <TextArea
-                        label="Deal Summary"
+                        label={t('create_deal.fields.deal_summary')}
                         value={formData.summary}
                         onChange={(value) => setField('summary', value)}
                       />
 
                       <TextArea
-                        label="Reason for Sale / Fundraising"
+                        label={t('create_deal.fields.reason')}
                         value={formData.strategicReason}
                         onChange={(value) => setField('strategicReason', value)}
                       />
 
                       <TextArea
-                        label="Future Plan"
+                        label={t('create_deal.fields.future_plan')}
                         value={formData.futurePlan}
                         onChange={(value) => setField('futurePlan', value)}
                       />
@@ -727,11 +710,11 @@ export default function CreateDeal() {
 
                                 <span>
                                   <span className="block text-sm font-black text-white">
-                                    {docName}
+                                    {t(`create_deal.documents.${optionKey(docName)}`)}
                                   </span>
 
                                   <span className="block text-xs text-slate-500 mt-2 leading-5">
-                                    Mark this diligence category as prepared.
+                                    {t('create_deal.document_prepared')}
                                   </span>
                                 </span>
                               </span>
@@ -750,9 +733,7 @@ export default function CreateDeal() {
                         <div className="flex items-start gap-3">
                           <AlertCircle size={18} className="text-slate-500 mt-0.5 shrink-0" />
                           <p className="text-xs text-slate-500 leading-6">
-                            This demo records document categories. A production build should connect
-                            upload actions to Firebase Storage with private file permissions,
-                            watermarking, access logs, and per-data-room download rules.
+                            {t('create_deal.document_demo_note')}
                           </p>
                         </div>
                       </div>
@@ -770,7 +751,7 @@ export default function CreateDeal() {
                   className="flex-1 py-4 rounded-2xl border border-slate-700 text-slate-300 text-[10px] uppercase font-black tracking-widest flex items-center justify-center gap-2 hover:bg-slate-900 hover:border-slate-600 transition-all"
                 >
                   <ChevronLeft size={14} />
-                  Back
+                  {t('common.back')}
                 </button>
               )}
 
@@ -780,7 +761,7 @@ export default function CreateDeal() {
                   onClick={handleNext}
                   className="flex-1 py-4 rounded-2xl bg-emerald-500 text-[#020617] text-[10px] uppercase font-black tracking-widest flex items-center justify-center gap-2 hover:bg-emerald-400 transition-all shadow-lg shadow-emerald-500/20"
                 >
-                  Next Step
+                  {t('create_deal.next_step')}
                   <ChevronRight size={14} />
                 </button>
               ) : (
@@ -792,11 +773,11 @@ export default function CreateDeal() {
                   {loading ? (
                     <>
                       <Loader2 size={15} className="animate-spin" />
-                      Submitting...
+                      {t('common.submitting')}
                     </>
                   ) : (
                     <>
-                      Submit for Review
+                      {t('create_deal.submit_for_review')}
                       <ArrowUpRight size={15} />
                     </>
                   )}
@@ -815,6 +796,8 @@ function LockedDealCreation({
 }: {
   onNavigateProfile: () => void;
 }) {
+  const { t } = useTranslation();
+
   return (
     <div className="min-h-[70vh] flex items-center justify-center">
       <motion.div
@@ -831,16 +814,15 @@ function LockedDealCreation({
           </div>
 
           <p className="text-[10px] uppercase tracking-[0.35em] text-orange-400 font-black mb-4">
-            KYC Required
+            {t('kyc.required_eyebrow')}
           </p>
 
           <h1 className="text-4xl md:text-5xl font-black tracking-tight text-white">
-            Deal Creation Is Locked
+            {t('create_deal.locked_title')}
           </h1>
 
           <p className="text-sm text-slate-400 leading-7 mt-5 max-w-xl mx-auto">
-            Seller or advisor accounts must complete KYC, business license review, and shareholder
-            verification before creating or submitting a deal.
+            {t('create_deal.locked_description')}
           </p>
 
           <button
@@ -848,7 +830,7 @@ function LockedDealCreation({
             onClick={onNavigateProfile}
             className="mt-8 inline-flex items-center justify-center gap-3 px-8 py-4 rounded-2xl bg-emerald-500 text-[#020617] text-[10px] uppercase tracking-widest font-black hover:bg-emerald-400 transition-all shadow-lg shadow-emerald-500/20"
           >
-            Complete KYC
+            {t('kyc.complete_kyc')}
             <ArrowUpRight size={16} />
           </button>
         </div>
@@ -873,6 +855,7 @@ function StepCard({
   complete: boolean;
   onClick: () => void;
 }) {
+  const { t } = useTranslation();
   const Icon = item.icon;
 
   return (
@@ -904,7 +887,7 @@ function StepCard({
               active || complete ? 'text-emerald-400' : 'text-slate-500'
             }`}
           >
-            Step {item.id}
+            {t('create_deal.step_number', { step: item.id })}
           </p>
 
           <p className="text-sm font-black text-white mt-1">
@@ -921,11 +904,13 @@ function StepCard({
 }
 
 function DealSnapshot({ formData }: { formData: DealFormData }) {
+  const { t } = useTranslation();
+
   const rows = [
-    ['Company', formData.companyName || 'Not set'],
-    ['Industry', formData.industry || 'Not set'],
-    ['Valuation', formData.valuation ? formatMoney(formData.valuation) : 'Not set'],
-    ['Docs', `${formData.uploadedDocs.length}/${documents.length} selected`]
+    [t('create_deal.snapshot.company'), formData.companyName || t('common.not_set')],
+    [t('create_deal.snapshot.industry'), formData.industry || t('common.not_set')],
+    [t('create_deal.snapshot.valuation'), formData.valuation ? formatMoney(formData.valuation) : t('common.not_set')],
+    [t('create_deal.snapshot.docs'), t('create_deal.snapshot.docs_selected', { selected: formData.uploadedDocs.length, total: documents.length })]
   ];
 
   return (
@@ -933,10 +918,10 @@ function DealSnapshot({ formData }: { formData: DealFormData }) {
       <div className="flex items-center justify-between mb-5">
         <div>
           <p className="text-[10px] uppercase tracking-[0.25em] text-slate-500 font-black">
-            Live Snapshot
+            {t('create_deal.snapshot.live_snapshot')}
           </p>
           <h3 className="text-xl font-black text-white mt-2">
-            Deal Preview
+            {t('create_deal.snapshot.deal_preview')}
           </h3>
         </div>
 
@@ -1012,6 +997,8 @@ function SelectField({
   options: Array<string | { label: string; value: string }>;
   required?: boolean;
 }) {
+  const { t } = useTranslation();
+
   return (
     <label className="block space-y-2">
       <span className="inline-flex items-center gap-2 text-[10px] uppercase font-black tracking-[0.22em] text-slate-500">
@@ -1026,7 +1013,7 @@ function SelectField({
         value={value}
         onChange={(event) => onChange(event.target.value)}
       >
-        {required && <option value="">Select {label}</option>}
+        {required && <option value="">{t('common.select_label', { label })}</option>}
 
         {options.map((item) => {
           const optionLabel = typeof item === 'string' ? item : item.label;

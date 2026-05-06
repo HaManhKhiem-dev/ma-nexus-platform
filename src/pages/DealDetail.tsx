@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -30,7 +30,7 @@ import {
 
 import { useDeal } from '../hooks/useFirebase';
 import { formatCurrency } from '../lib/utils';
-import { getDealSummary } from '../lib/gemini';
+import { getDealSummary, explainDealForInvestor } from '../lib/gemini';
 import { useAuth } from '../components/AuthContext';
 import {
   collection,
@@ -48,11 +48,15 @@ import {
   canViewPrivateDeal,
   isKycVerified,
   statusLabel,
+  normalizeDealStatus,
   canRequestNdaForDeal,
 } from '../lib/compliance';
 import { writeAuditLog } from '../lib/audit';
+import { useTranslation } from 'react-i18next';
+import { scoreDealForInvestor } from '../lib/recommendation';
 
 export default function DealDetail() {
+  const { t, i18n } = useTranslation();
   const { id } = useParams();
   const navigate = useNavigate();
 
@@ -63,6 +67,8 @@ export default function DealDetail() {
   const { user, profile } = useAuth();
 
   const [aiSummary, setAiSummary] = useState<string | null>(null);
+  const [investorMemo, setInvestorMemo] = useState<any | null>(null);
+  const [investorMemoLoading, setInvestorMemoLoading] = useState(false);
   const [ndaStatus, setNdaStatus] = useState<string | null>(
     fallbackDeal ? 'requested' : null
   );
@@ -70,15 +76,109 @@ export default function DealDetail() {
   const [signatureName, setSignatureName] = useState('');
   const [isSigning, setIsSigning] = useState(false);
 
+  const dealStatusLabel = (status?: string) =>
+    t(`statuses.deals.${normalizeDealStatus(status)}`, {
+      defaultValue: statusLabel(status),
+    });
+
+  const investorAnalysis = useMemo(() => {
+    const result = scoreDealForInvestor(deal, profile?.investorPreference);
+
+    return {
+      score: result.score,
+      reasons: result.reasons,
+      risks: result.risks,
+      label:
+        result.score >= 85
+          ? t('deal_detail.investor_memo.strong_fit')
+          : result.score >= 70
+          ? t('deal_detail.investor_memo.good_fit')
+          : result.score >= 55
+          ? t('deal_detail.investor_memo.moderate_fit')
+          : t('deal_detail.investor_memo.low_fit'),
+    };
+  }, [deal, profile?.investorPreference, t]);
+
   useEffect(() => {
-    if (deal && !aiSummary) {
-      getDealSummary(deal).then(setAiSummary).catch(() => {
-        setAiSummary(
-          'Strong strategic fit for buyers seeking revenue scale, defensible market position, and an organized diligence package. Key diligence priorities include customer concentration, owner dependency, legal encumbrances, and quality of earnings.'
-        );
-      });
+  if (!deal) return;
+
+  let cancelled = false;
+  const lang = i18n.language === 'vi' ? 'vi' : 'en';
+  const cacheKey = `ai-summary:${deal.id}:${lang}`;
+
+  const cached = window.localStorage.getItem(cacheKey);
+  if (cached) {
+    setAiSummary(cached);
+    return;
+  }
+
+  setAiSummary(null);
+
+  getDealSummary(deal, lang)
+    .then((summary) => {
+      if (!cancelled) {
+        const finalSummary = summary || t('deal_detail.ai_fallback');
+        setAiSummary(finalSummary);
+        window.localStorage.setItem(cacheKey, finalSummary);
+      }
+    })
+    .catch(() => {
+      if (!cancelled) {
+        setAiSummary(t('deal_detail.ai_fallback'));
+      }
+    });
+
+  return () => {
+    cancelled = true;
+  };
+}, [deal?.id, i18n.language, t]);
+
+useEffect(() => {
+  if (!deal || !profile?.investorPreference || !investorAnalysis) return;
+
+  let cancelled = false;
+  const lang = i18n.language === 'vi' ? 'vi' : 'en';
+  const cacheKey = `investor-memo:${deal.id}:${lang}:${investorAnalysis.score}`;
+
+  const cached = window.localStorage.getItem(cacheKey);
+  if (cached) {
+    try {
+      setInvestorMemo(JSON.parse(cached));
+      return;
+    } catch {
+      window.localStorage.removeItem(cacheKey);
     }
-  }, [deal, aiSummary]);
+  }
+
+  const generateInvestorMemo = async () => {
+    setInvestorMemoLoading(true);
+    setInvestorMemo(null);
+
+    try {
+      const memo = await explainDealForInvestor(
+        deal,
+        profile.investorPreference,
+        investorAnalysis,
+        lang
+      );
+
+      if (!cancelled) {
+        setInvestorMemo(memo);
+        window.localStorage.setItem(cacheKey, JSON.stringify(memo));
+      }
+    } finally {
+      if (!cancelled) {
+        setInvestorMemoLoading(false);
+      }
+    }
+  };
+
+  generateInvestorMemo();
+
+  return () => {
+    cancelled = true;
+  };
+}, [deal?.id, profile?.investorPreference, investorAnalysis.score, i18n.language]);
 
   useEffect(() => {
     if (!user || !id || fallbackDeal) return;
@@ -98,14 +198,14 @@ export default function DealDetail() {
 
   const handleOpenNdaModal = () => {
     if (fallbackDeal && !firestoreDeal) {
-      alert('NDA requests are only available for real deals. This is a sample deal for preview.');
+      alert(t('deal_detail.alerts.real_deals_only'));
       return;
     }
 
     const validation = canRequestNdaForDeal(profile, deal, deal?.status);
 
     if (!validation.canRequest) {
-      alert(validation.reason || 'You cannot request an NDA for this deal.');
+      alert(validation.reason || t('deal_detail.alerts.cannot_request_nda'));
       return;
     }
 
@@ -114,17 +214,17 @@ export default function DealDetail() {
 
   const signAndRequestNDA = async () => {
     if (!user) {
-      alert('Please sign in to request an NDA.');
+      alert(t('deal_detail.alerts.sign_in_to_request_nda'));
       return;
     }
 
     if (!deal) {
-      alert('Deal information could not be loaded. Please refresh and try again.');
+      alert(t('deal_detail.alerts.deal_info_missing'));
       return;
     }
 
     if (fallbackDeal && !firestoreDeal) {
-      alert('Cannot request NDA on sample deals. Please select a real deal.');
+      alert(t('deal_detail.alerts.no_sample_nda'));
       return;
     }
 
@@ -135,7 +235,7 @@ export default function DealDetail() {
         dealTitle: deal.title,
       });
 
-      alert('Unable to request NDA: Seller information is missing. Please contact support or try another deal.');
+      alert(t('deal_detail.alerts.seller_missing'));
 
       await writeAuditLog({
         actorUid: user.uid,
@@ -156,7 +256,7 @@ export default function DealDetail() {
     if (deal.sellerUid === 'sample-seller') {
       console.error('NDA Creation Blocked: Invalid sample sellerUid');
 
-      alert('Cannot request NDA: Seller account is invalid. Please contact support.');
+      alert(t('deal_detail.alerts.seller_invalid'));
 
       await writeAuditLog({
         actorUid: user.uid,
@@ -173,7 +273,7 @@ export default function DealDetail() {
     }
 
     if (signatureName.trim().length < 2) {
-      alert('Please enter your full legal name to sign.');
+      alert(t('deal_detail.alerts.enter_legal_name'));
       return;
     }
 
@@ -233,12 +333,12 @@ export default function DealDetail() {
         targetType: 'nda',
         dealId: id,
         metadata: {
-          error: err instanceof Error ? err.message : 'Unknown error',
+          error: err instanceof Error ? err.message : t('common.unknown_error'),
           dealSellerUid: deal.sellerUid,
         },
       });
 
-      alert('Failed to sign NDA. Please check that you have completed KYC verification and try again.');
+      alert(t('deal_detail.alerts.sign_nda_failed'));
     } finally {
       setIsSigning(false);
     }
@@ -272,22 +372,22 @@ export default function DealDetail() {
           </div>
 
           <p className="text-[10px] uppercase tracking-[0.35em] text-red-400 font-black mb-4">
-            Deal Not Found
+            {t('deal_detail.not_found.eyebrow')}
           </p>
 
           <h1 className="text-4xl font-black text-white">
-            This deal does not exist
+            {t('deal_detail.not_found.title')}
           </h1>
 
           <p className="text-sm text-slate-500 leading-7 mt-4">
-            The listing may have been removed, archived, or never existed in the first place.
+            {t('deal_detail.not_found.description')}
           </p>
 
           <button
             onClick={() => navigate('/marketplace')}
             className="mt-8 inline-flex items-center gap-2 px-7 py-4 rounded-2xl bg-emerald-500 text-[#020617] text-[10px] uppercase tracking-widest font-black hover:bg-emerald-400 transition-all"
           >
-            Back To Marketplace
+            {t('deal_detail.back_to_marketplace')}
             <ArrowUpRight size={15} />
           </button>
         </div>
@@ -298,46 +398,45 @@ export default function DealDetail() {
   const isSellerOwner = user?.uid === deal.sellerUid;
   const isAuthorized = canViewPrivateDeal(profile, ndaStatus, isSellerOwner, deal.status);
   const latestRevenue = Number(deal.revenue?.[2] || 0);
-  const verifiedKyc = isKycVerified(profile);
-
+  const verifiedKyc = isKycVerified(profile); 
   const metrics = [
     {
-      label: 'Valuation',
-      value: deal.valuation ? formatCurrency(Number(deal.valuation)) : 'TBA',
+      label: t('deal_detail.metrics.valuation'),
+      value: deal.valuation ? formatCurrency(Number(deal.valuation)) : t('common.tba'),
       icon: BadgeDollarSign,
     },
     {
-      label: 'Equity Offered',
+      label: t('deal_detail.metrics.equity_offered'),
       value: `${deal.equityOffered || 0}%`,
       icon: DollarSign,
     },
     {
-      label: 'Revenue',
-      value: latestRevenue ? formatCurrency(latestRevenue) : 'Private',
+      label: t('deal_detail.metrics.revenue'),
+      value: latestRevenue ? formatCurrency(latestRevenue) : t('common.private'),
       icon: TrendingUp,
     },
     {
-      label: 'EBITDA',
-      value: deal.ebitda ? formatCurrency(Number(deal.ebitda)) : 'Private',
+      label: t('deal_detail.metrics.ebitda'),
+      value: deal.ebitda ? formatCurrency(Number(deal.ebitda)) : t('common.private'),
       icon: BarChart3,
     },
   ];
 
   const scores = [
     {
-      label: 'Match Score',
+      label: t('deal_detail.scores.match'),
       value: Number(deal.matchScore || 82),
-      hint: 'Buyer mandate fit',
+      hint: t('deal_detail.scores.buyer_fit'),
     },
     {
-      label: 'Risk Score',
+      label: t('deal_detail.scores.risk'),
       value: Number(deal.riskScore || 35),
-      hint: 'Lower is better',
+      hint: t('deal_detail.scores.lower_better'),
     },
     {
-      label: 'Growth Score',
+      label: t('deal_detail.scores.growth'),
       value: Number(deal.growthScore || 78),
-      hint: 'Revenue momentum',
+      hint: t('deal_detail.scores.revenue_momentum'),
     },
   ];
 
@@ -348,7 +447,7 @@ export default function DealDetail() {
         className="inline-flex items-center gap-2 text-slate-500 hover:text-white transition-colors text-[10px] uppercase tracking-widest font-black"
       >
         <ArrowLeft size={14} />
-        Back To Marketplace
+        {t('deal_detail.back_to_marketplace')}
       </button>
 
       <section className="relative overflow-hidden rounded-[44px] border border-slate-800 bg-[#0f172a]/80 p-7 md:p-10 shadow-2xl shadow-black/30">
@@ -358,15 +457,16 @@ export default function DealDetail() {
         <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-10 items-end">
           <div className="lg:col-span-8 space-y-7">
             <div className="flex flex-wrap items-center gap-3">
+              
               <StatusPill label={deal.industry} icon={<Building2 size={12} />} />
               <StatusPill label={deal.location} icon={<MapPin size={12} />} />
               <StatusPill
-                label={statusLabel(deal.status || 'published')}
+                label={dealStatusLabel(deal.status || 'published')}
                 tone="emerald"
                 icon={<ShieldCheck size={12} />}
               />
               {fallbackDeal && !firestoreDeal && (
-                <StatusPill label="Sample Deal" tone="orange" icon={<Info size={12} />} />
+                <StatusPill label={t('deal_detail.sample_deal')} tone="orange" icon={<Info size={12} />} />
               )}
             </div>
 
@@ -381,7 +481,7 @@ export default function DealDetail() {
 
               <p className="mt-6 text-base md:text-lg text-slate-400 leading-8 max-w-3xl border-l-4 border-emerald-500/30 pl-6">
                 {deal.summary ||
-                  'A strategic opportunity with strong growth potential and controlled private diligence access.'}
+                  t('deal_detail.default_summary')}
               </p>
             </div>
           </div>
@@ -409,7 +509,14 @@ export default function DealDetail() {
               <ScoreCard key={item.label} {...item} />
             ))}
           </section>
-
+              <InvestorMemoCard
+            score={investorAnalysis.score}
+            label={investorAnalysis.label}
+            reasons={investorAnalysis.reasons}
+            risks={investorAnalysis.risks}
+            aiMemo={investorMemo}
+            aiMemoLoading={investorMemoLoading}
+          />
           <section className="rounded-[34px] border border-slate-800 bg-[#0f172a]/70 p-6 md:p-8 shadow-2xl shadow-black/20">
             <div className="flex items-center gap-3 mb-5">
               <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
@@ -418,40 +525,40 @@ export default function DealDetail() {
 
               <div>
                 <p className="text-[10px] uppercase tracking-[0.3em] text-emerald-400 font-black">
-                  AI Deal Intelligence
+                  {t('deal_detail.ai_deal_intelligence')}
                 </p>
 
                 <h2 className="text-2xl font-black text-white mt-1">
-                  Strategic Summary
+                  {t('deal_detail.strategic_summary')}
                 </h2>
               </div>
             </div>
 
             <p className="text-sm md:text-base leading-8 text-slate-300">
               {aiSummary ||
-                'Generating summary from deal profile, financial metrics, and strategic context...'}
+                t('deal_detail.generating_summary')}
             </p>
           </section>
 
           <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <ContentPanel
-              title="Public View"
-              eyebrow="Open Information"
+              title={t('deal_detail.public_view.title')}
+              eyebrow={t('deal_detail.public_view.eyebrow')}
               icon={<Info size={20} />}
             >
               {[
                 [
-                  'Market Position',
-                  deal.marketPosition || 'Public market position summary available.',
+                  t('deal_detail.public_view.market_position'),
+                  deal.marketPosition || t('deal_detail.public_view.market_position_default'),
                 ],
                 [
-                  'Strategic Objective',
+                  t('deal_detail.public_view.strategic_objective'),
                   deal.strategicReason ||
-                    'Seller is seeking strategic capital, exit, or growth partner.',
+                    t('deal_detail.public_view.strategic_objective_default'),
                 ],
                 [
-                  'Next Step',
-                  'Request NDA to unlock full financials, contracts, IP, HR and legal files.',
+                  t('deal_detail.public_view.next_step'),
+                  t('deal_detail.public_view.next_step_text'),
                 ],
               ].map(([label, text]) => (
                 <InfoBlock key={label} label={label} text={text} />
@@ -459,15 +566,15 @@ export default function DealDetail() {
             </ContentPanel>
 
             <ContentPanel
-              title="Private View"
-              eyebrow="NDA-Gated"
+              title={t('deal_detail.private_view.title')}
+              eyebrow={t('deal_detail.private_view.eyebrow')}
               icon={<FolderLock size={20} />}
             >
               {[
-                'Full 3-year financial model',
-                'Customer and supplier contracts',
-                'Corporate records and cap table',
-                'IP, technology, HR, and compliance documents',
+                t('deal_detail.private_view.full_financial_model'),
+                t('deal_detail.private_view.contracts'),
+                t('deal_detail.private_view.corporate_records'),
+                t('deal_detail.private_view.ip_documents'),
               ].map((item) => (
                 <PrivateAccessItem
                   key={item}
@@ -513,6 +620,238 @@ export default function DealDetail() {
   );
 }
 
+
+function InvestorMemoCard({
+  score,
+  label,
+  reasons,
+  risks,
+  aiMemo,
+  aiMemoLoading,
+}: {
+  score: number;
+  label: string;
+  reasons: string[];
+  risks: string[];
+  aiMemo?: any | null;
+  aiMemoLoading?: boolean;
+}) {
+  const { t, i18n } = useTranslation();
+  const normalizedScore = Math.min(Math.max(score, 0), 100);
+
+  const nextSteps = [
+    t('deal_detail.investor_memo.next_step_data_room'),
+    t('deal_detail.investor_memo.next_step_financials'),
+    t('deal_detail.investor_memo.next_step_risks'),
+  ];
+
+  return (
+    <section className="relative overflow-hidden rounded-[34px] border border-emerald-500/20 bg-emerald-500/[0.04] p-6 md:p-8 shadow-2xl shadow-black/20">
+      <div className="absolute -top-32 -right-24 w-80 h-80 rounded-full bg-emerald-500/10 blur-[100px]" />
+
+      <div className="relative z-10">
+        <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6 mb-8">
+          <div className="flex items-start gap-4">
+            <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0">
+              <Sparkles size={24} className="text-emerald-400" />
+            </div>
+
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.3em] text-emerald-400 font-black">
+                {t('deal_detail.investor_memo.eyebrow')}
+              </p>
+
+              <h2 className="text-2xl md:text-3xl font-black text-white mt-2">
+                {t('deal_detail.investor_memo.title')}
+              </h2>
+
+              <p className="text-sm text-slate-400 leading-7 mt-3 max-w-2xl">
+                {t('deal_detail.investor_memo.description')}
+              </p>
+            </div>
+          </div>
+
+          <div className="rounded-[28px] border border-emerald-500/20 bg-[#020617]/70 px-6 py-5 min-w-[180px]">
+            <p className="text-[9px] uppercase tracking-widest text-slate-500 font-black">
+              {t('deal_detail.investor_memo.fit_score')}
+            </p>
+
+            <div className="flex items-end gap-2 mt-2">
+              <p className="text-5xl font-black text-white">
+                {normalizedScore}
+              </p>
+              <p className="text-sm text-slate-500 pb-2">%</p>
+            </div>
+
+            <p className="text-[10px] uppercase tracking-widest text-emerald-400 font-black mt-3">
+              {label}
+            </p>
+
+            <div className="mt-4 h-2 rounded-full bg-slate-900 overflow-hidden">
+              <motion.div
+                initial={{ width: 0 }}
+                animate={{ width: `${normalizedScore}%` }}
+                transition={{ duration: 0.7 }}
+                className="h-full rounded-full bg-emerald-500"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <MemoColumn
+            title={t('deal_detail.investor_memo.why_fit')}
+            tone="emerald"
+            items={
+              reasons.length > 0
+                ? reasons.slice(0, 4)
+                : [t('deal_detail.investor_memo.no_reasons')]
+            }
+          />
+
+          <MemoColumn
+            title={t('deal_detail.investor_memo.key_risks')}
+            tone="orange"
+            items={
+              risks.length > 0
+                ? risks.slice(0, 4)
+                : [t('deal_detail.investor_memo.no_major_risks')]
+            }
+          />
+
+          <MemoColumn
+            title={t('deal_detail.investor_memo.suggested_next_steps')}
+            tone="slate"
+            items={nextSteps}
+          />
+        </div>
+        <div className="mt-6 rounded-[26px] border border-slate-800 bg-[#020617]/70 p-5">
+  <div className="flex items-center justify-between gap-4 mb-5">
+    <div>
+      <p className="text-[10px] uppercase tracking-[0.25em] text-emerald-400 font-black">
+        {t('deal_detail.investor_memo.ai_commentary')}
+      </p>
+
+      <h3 className="text-xl font-black text-white mt-1">
+        {t('deal_detail.investor_memo.ai_commentary_title')}
+      </h3>
+    </div>
+
+    {aiMemoLoading && (
+      <Loader2 size={18} className="text-emerald-400 animate-spin" />
+    )}
+  </div>
+
+  {aiMemoLoading ? (
+    <p className="text-sm text-slate-500 leading-7">
+      {t('deal_detail.investor_memo.ai_commentary_loading')}
+    </p>
+  ) : aiMemo ? (
+    <div className="space-y-5">
+      <p className="text-sm text-slate-300 leading-7">
+        {aiMemo.summary}
+      </p>
+
+      <MemoTextList
+        title={t('deal_detail.investor_memo.ai_highlights')}
+        items={aiMemo.highlights || []}
+      />
+
+      <MemoTextList
+        title={t('deal_detail.investor_memo.ai_risks')}
+        items={aiMemo.risks || []}
+      />
+
+      <MemoTextList
+        title={t('deal_detail.investor_memo.ai_questions')}
+        items={aiMemo.dueDiligenceQuestions || []}
+      />
+
+      {aiMemo.nextAction && (
+        <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3">
+          <p className="text-[10px] uppercase tracking-widest text-emerald-400 font-black mb-2">
+            {t('deal_detail.investor_memo.ai_next_action')}
+          </p>
+          <p className="text-xs text-emerald-100/80 leading-6">
+            {aiMemo.nextAction}
+          </p>
+        </div>
+      )}
+    </div>
+  ) : (
+    <p className="text-sm text-slate-500 leading-7">
+      {t('deal_detail.investor_memo.ai_commentary_unavailable')}
+    </p>
+  )}
+</div>
+      </div>
+    </section>
+  );
+}
+
+function MemoColumn({
+  title,
+  items,
+  tone,
+}: {
+  title: string;
+  items: string[];
+  tone: 'emerald' | 'orange' | 'slate';
+}) {
+  const toneClass =
+    tone === 'emerald'
+      ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
+      : tone === 'orange'
+      ? 'border-orange-500/20 bg-orange-500/10 text-orange-300'
+      : 'border-slate-800 bg-[#020617] text-slate-300';
+
+  return (
+    <div className="rounded-[26px] border border-slate-800 bg-[#020617]/70 p-5">
+      <p className="text-[10px] uppercase tracking-[0.25em] text-slate-500 font-black mb-4">
+        {title}
+      </p>
+
+      <div className="space-y-3">
+        {items.map((item) => (
+          <div
+            key={item}
+            className={`rounded-2xl border px-4 py-3 text-xs leading-6 ${toneClass}`}
+          >
+            {item}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+function MemoTextList({
+  title,
+  items,
+}: {
+  title: string;
+  items: string[];
+}) {
+  if (!items || items.length === 0) return null;
+
+  return (
+    <div>
+      <p className="text-[10px] uppercase tracking-widest text-slate-500 font-black mb-3">
+        {title}
+      </p>
+
+      <div className="space-y-2">
+        {items.map((item) => (
+          <div
+            key={item}
+            className="rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3 text-xs text-slate-300 leading-6"
+          >
+            {item}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 function StatusPill({
   label,
   icon,
@@ -548,6 +887,8 @@ function AccessStatusCard({
   ndaStatus: string | null;
   verifiedKyc: boolean;
 }) {
+  const { t, i18n } = useTranslation();
+
   return (
     <div
       className={`rounded-[30px] border p-6 ${
@@ -573,21 +914,21 @@ function AccessStatusCard({
               isAuthorized ? 'text-emerald-400' : 'text-orange-400'
             }`}
           >
-            Security Status
+            {t('deal_detail.security_status')}
           </p>
 
           <h3 className="text-2xl font-black text-white mt-2">
-            {isAuthorized ? 'Access Granted' : 'NDA Required'}
+            {isAuthorized ? t('deal_detail.access_granted') : t('deal_detail.nda_required')}
           </h3>
 
           <p className="text-xs text-slate-400 leading-6 mt-3">
             {isAuthorized
-              ? 'Private diligence content is available for this account.'
+              ? t('deal_detail.private_content_available')
               : ndaStatus === 'requested'
-              ? 'NDA request is pending seller or admin approval.'
+              ? t('deal_detail.nda_pending')
               : verifiedKyc
-              ? 'Sign NDA to request access to private diligence files.'
-              : 'KYC verification is required before requesting NDA access.'}
+              ? t('deal_detail.sign_nda_to_request')
+              : t('deal_detail.kyc_required_for_nda')}
           </p>
         </div>
       </div>
@@ -765,30 +1106,31 @@ function DealActionPanel({
   onNavigate: (path: string) => void;
   canRequest: boolean;
 }) {
+  const { t, i18n } = useTranslation();
+
   const actions = [
-    { label: 'Bookmark', icon: Bookmark, action: 'bookmark' },
-    { label: 'Contact', icon: MessagesSquare, action: 'contact' },
-    { label: 'Meeting', icon: CalendarDays, action: 'meeting' },
-    { label: 'Offer', icon: DollarSign, action: 'offer' },
+    { label: t('deal_detail.actions.bookmark'), icon: Bookmark, action: 'bookmark' },
+    { label: t('deal_detail.actions.contact'), icon: MessagesSquare, action: 'contact' },
+    { label: t('deal_detail.actions.meeting'), icon: CalendarDays, action: 'meeting' },
+    { label: t('deal_detail.actions.offer'), icon: DollarSign, action: 'offer' },
   ];
 
   return (
     <section className="rounded-[34px] border border-slate-800 bg-[#0f172a]/70 p-6 shadow-2xl shadow-black/20">
       <div className="space-y-2 mb-6">
         <p className="text-[10px] uppercase tracking-[0.25em] text-slate-500 font-black">
-          Deal Control
+          {t('deal_detail.deal_control')}
         </p>
 
         <h3 className="text-2xl font-black text-white">
-          Access & Actions
+          {t('deal_detail.access_actions')}
         </h3>
       </div>
 
       {!isAuthorized && (
         <div className="space-y-4 mb-6">
           <p className="text-xs text-slate-500 leading-7">
-            Buyer must complete KYC and request NDA before accessing contracts,
-            full financials, IP, and legal diligence files.
+            {t('deal_detail.access_requirement')}
           </p>
 
           {!verifiedKyc && (
@@ -796,7 +1138,7 @@ function DealActionPanel({
               <div className="flex items-start gap-3">
                 <ShieldAlert size={16} className="text-orange-400 mt-0.5 shrink-0" />
                 <p className="text-[10px] text-orange-200 uppercase tracking-widest font-black leading-5">
-                  KYC verification required first
+                  {t('deal_detail.kyc_required_first')}
                 </p>
               </div>
             </div>
@@ -804,7 +1146,7 @@ function DealActionPanel({
 
           {ndaStatus === 'requested' ? (
             <div className="w-full text-center py-4 rounded-2xl border border-blue-500/20 bg-blue-500/10 text-blue-300 text-[10px] font-black uppercase tracking-widest">
-              NDA Request Pending
+              {t('deal_detail.nda_request_pending')}
             </div>
           ) : (
             <button
@@ -812,7 +1154,7 @@ function DealActionPanel({
               disabled={!canRequest}
               className="w-full py-4 rounded-2xl bg-emerald-500 text-[#020617] text-[10px] font-black uppercase tracking-widest hover:bg-emerald-400 transition-all flex items-center justify-center gap-2 disabled:opacity-50 shadow-lg shadow-emerald-500/20"
             >
-              Review & Sign NDA
+              {t('deal_detail.review_sign_nda')}
               <ChevronRight size={14} />
             </button>
           )}
@@ -844,7 +1186,7 @@ function DealActionPanel({
           }}
           className="w-full mt-4 py-4 rounded-2xl bg-emerald-500 text-[#020617] text-[10px] font-black uppercase tracking-widest hover:bg-emerald-400 transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20"
         >
-          Open Data Room
+          {t('deal_detail.open_data_room')}
           <ShieldCheck size={14} />
         </button>
       )}
@@ -854,7 +1196,7 @@ function DealActionPanel({
           onClick={() => onNavigate('/dashboard')}
           className="w-full mt-4 py-4 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 text-emerald-400 text-[10px] font-black uppercase tracking-widest hover:bg-emerald-500 hover:text-[#020617] transition-all flex items-center justify-center gap-2"
         >
-          Manage NDA Requests
+          {t('deal_detail.manage_nda_requests')}
           <FileSignature size={14} />
         </button>
       )}
@@ -863,12 +1205,14 @@ function DealActionPanel({
 }
 
 function SellerPanel() {
+  const { t, i18n } = useTranslation();
+
   return (
     <section className="rounded-[34px] border border-slate-800 bg-[#0f172a]/70 p-6 shadow-2xl shadow-black/20">
       <div className="flex items-center gap-2 text-slate-500 mb-5">
         <Info size={14} />
         <span className="text-[10px] uppercase font-black tracking-widest">
-          Listing Managed By
+          {t('deal_detail.seller.listing_managed_by')}
         </span>
       </div>
 
@@ -879,11 +1223,11 @@ function SellerPanel() {
 
         <div>
           <p className="text-xs font-black uppercase tracking-widest text-white">
-            Verified Seller / Advisor
+            {t('deal_detail.seller.verified_seller_advisor')}
           </p>
 
           <p className="text-[10px] text-slate-500 mt-1">
-            KYC, company license, shareholder records
+            {t('deal_detail.seller.kyc_license_records')}
           </p>
         </div>
       </div>
@@ -892,18 +1236,20 @@ function SellerPanel() {
 }
 
 function LegalWorkflowPanel() {
+  const { t, i18n } = useTranslation();
+
   const workflow = [
-    'Generate NDA',
-    'Review LOI',
-    'Negotiate SPA',
-    'eSignature',
-    'Closing archive',
+    t('deal_detail.workflow.generate_nda'),
+    t('deal_detail.workflow.review_loi'),
+    t('deal_detail.workflow.negotiate_spa'),
+    t('deal_detail.workflow.esignature'),
+    t('deal_detail.workflow.closing_archive'),
   ];
 
   return (
     <section className="rounded-[34px] border border-slate-800 bg-[#0f172a]/70 p-6 shadow-2xl shadow-black/20">
       <p className="text-[10px] uppercase tracking-widest font-black text-slate-500 mb-5">
-        Legal Workflow
+        {t('deal_detail.workflow.title')}
       </p>
 
       <div className="space-y-3">
@@ -936,6 +1282,8 @@ function NdaModal({
   onClose: () => void;
   onSign: () => void;
 }) {
+  const { t, i18n } = useTranslation();
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -968,11 +1316,11 @@ function NdaModal({
 
               <div>
                 <p className="text-[10px] uppercase tracking-[0.3em] font-black text-emerald-400">
-                  Digital Signature Required
+                  {t('deal_detail.nda_modal.digital_signature_required')}
                 </p>
 
                 <h2 className="text-2xl md:text-3xl font-black text-white mt-2">
-                  Non-Disclosure Agreement
+                  {t('deal_detail.nda_modal.title')}
                 </h2>
               </div>
             </div>
@@ -980,26 +1328,25 @@ function NdaModal({
 
           <div className="p-7 md:p-8 overflow-y-auto flex-1 space-y-5 text-sm text-slate-400 leading-7">
             <p>
-              This Non-Disclosure Agreement is entered into to prevent the unauthorized
-              disclosure of confidential information connected to this private transaction.
+              {t('deal_detail.nda_modal.intro')}
             </p>
 
             <NdaClause
               number="1"
-              title="Confidential Information"
-              text="Confidential Information includes business, financial, operational, legal, technical, commercial, and strategic materials disclosed through this platform."
+              title={t('deal_detail.nda_modal.clause_confidential_title')}
+              text={t('deal_detail.nda_modal.clause_confidential_text')}
             />
 
             <NdaClause
               number="2"
-              title="Exclusions"
-              text="Receiving Party obligations do not extend to information already publicly known, independently developed, or lawfully obtained from another source without breach of duty."
+              title={t('deal_detail.nda_modal.clause_exclusions_title')}
+              text={t('deal_detail.nda_modal.clause_exclusions_text')}
             />
 
             <NdaClause
               number="3"
-              title="Receiving Party Obligations"
-              text="Receiving Party must hold and maintain Confidential Information in strict confidence and use it only for evaluating the transaction."
+              title={t('deal_detail.nda_modal.clause_obligations_title')}
+              text={t('deal_detail.nda_modal.clause_obligations_text')}
             />
 
             <div className="rounded-[24px] border border-orange-500/20 bg-orange-500/10 p-5">
@@ -1007,9 +1354,7 @@ function NdaModal({
                 <AlertTriangle size={18} className="text-orange-400 mt-0.5 shrink-0" />
 
                 <p className="text-xs text-orange-100/80 leading-6">
-                  By electronically signing this document, you acknowledge that your IP address,
-                  device information, user agent, and timestamp will be recorded in the audit log
-                  as proof of consent.
+                  {t('deal_detail.nda_modal.audit_notice')}
                 </p>
               </div>
             </div>
@@ -1018,14 +1363,14 @@ function NdaModal({
           <div className="p-7 md:p-8 border-t border-slate-800 bg-[#020617] space-y-4">
             <label className="block space-y-2">
               <span className="text-[10px] uppercase tracking-widest font-black text-slate-500">
-                Type your full legal name to sign
+                {t('deal_detail.nda_modal.type_legal_name')}
               </span>
 
               <input
                 type="text"
                 value={signatureName}
                 onChange={(e) => setSignatureName(e.target.value)}
-                placeholder="e.g. John Doe"
+                placeholder={t('deal_detail.nda_modal.name_placeholder')}
                 className="w-full rounded-2xl bg-slate-950 border border-slate-800 p-4 text-sm text-white placeholder:text-slate-600 focus:border-emerald-500/70 focus:ring-2 focus:ring-emerald-500/10 outline-none transition-all"
               />
             </label>
@@ -1035,7 +1380,7 @@ function NdaModal({
                 onClick={onClose}
                 className="flex-1 py-4 rounded-2xl border border-slate-700 text-slate-300 text-[10px] uppercase tracking-widest font-black hover:bg-slate-900 transition-all"
               >
-                Cancel
+                {t('common.cancel')}
               </button>
 
               <button
@@ -1046,11 +1391,11 @@ function NdaModal({
                 {isSigning ? (
                   <>
                     <Loader2 size={15} className="animate-spin" />
-                    Signing securely...
+                    {t('deal_detail.nda_modal.signing_securely')}
                   </>
                 ) : (
                   <>
-                    I Agree & Sign NDA
+                    {t('deal_detail.nda_modal.agree_sign')}
                     <CheckCircle2 size={15} />
                   </>
                 )}
@@ -1072,10 +1417,12 @@ function NdaClause({
   title: string;
   text: string;
 }) {
+  const { t, i18n } = useTranslation();
+
   return (
     <div className="rounded-[22px] border border-slate-800 bg-[#020617] p-5">
       <p className="text-[10px] uppercase tracking-widest font-black text-emerald-400">
-        Clause {number}
+        {t('deal_detail.nda_modal.clause_number', { number })}
       </p>
 
       <h3 className="text-sm font-black text-white mt-2">

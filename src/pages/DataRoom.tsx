@@ -28,6 +28,7 @@ import { db } from '../lib/firebase';
 import { canAccessDataRoom, isKycVerified } from '../lib/compliance';
 import { writeDataRoomEvent } from '../lib/audit';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 
 const folders = [
   { name: 'Financial', icon: TrendingUp, count: 18, color: 'emerald' },
@@ -46,6 +47,7 @@ const files = [
 ];
 
 export default function DataRoom() {
+  const { t } = useTranslation();
   const { user, profile } = useAuth();
   const [searchParams] = useSearchParams();
   const dealId = searchParams.get('dealId');
@@ -109,20 +111,20 @@ export default function DataRoom() {
             <Lock size={32} />
           </div>
           <div className="space-y-4">
-            <p className="text-[10px] uppercase tracking-[0.4em] text-red-500 font-black">Restricted Access Protocol</p>
-            <h1 className="text-4xl font-bold text-white tracking-tighter uppercase">Diligence Vault Locked</h1>
+            <p className="text-[10px] uppercase tracking-[0.4em] text-red-500 font-black">{t('data_room.restricted_protocol')}</p>
+            <h1 className="text-4xl font-bold text-white tracking-tighter uppercase">{t('data_room.locked_title')}</h1>
             <p className="text-slate-400 text-sm leading-relaxed font-light">
-              Quyền truy cập phòng dữ liệu yêu cầu xác minh danh tính <span className="text-white font-medium">KYC</span> và ký kết <span className="text-white font-medium">NDA</span> dành riêng cho thương vụ này. Mọi lượt xem đều được đóng dấu bản quyền và ghi lại nhật ký.
+              {t('data_room.locked_description_prefix')} <span className="text-white font-medium">KYC</span> {t('data_room.locked_description_middle')} <span className="text-white font-medium">NDA</span> {t('data_room.locked_description_suffix')}
             </p>
           </div>
           <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
             {!isKycVerified(profile) && (
               <Link to="/profile" className="px-8 py-4 bg-white text-slate-950 text-xs uppercase font-black tracking-widest hover:bg-emerald-400 transition-all rounded-2xl shadow-lg">
-                Complete Verification
+                {t('data_room.complete_verification')}
               </Link>
             )}
             <Link to="/marketplace" className="px-8 py-4 bg-slate-800 text-white text-xs uppercase font-black tracking-widest hover:bg-slate-700 transition-all rounded-2xl border border-slate-700">
-              Return to Market
+              {t('data_room.return_to_market')}
             </Link>
           </div>
         </motion.div>
@@ -137,23 +139,23 @@ export default function DataRoom() {
         <div className="space-y-4">
           <Link to="/marketplace" className="flex items-center gap-2 text-slate-500 hover:text-emerald-500 transition-colors group">
             <ArrowLeft size={14} />
-            <span className="text-[10px] uppercase font-black tracking-widest">Back to Listing</span>
+            <span className="text-[10px] uppercase font-black tracking-widest">{t('data_room.back_to_listing')}</span>
           </Link>
           <div className="flex items-center gap-2 text-emerald-500">
             <ShieldCheck size={14} />
-            <p className="text-[10px] uppercase tracking-[0.4em] font-black">SECURE DATA REPOSITORY</p>
+            <p className="text-[10px] uppercase tracking-[0.4em] font-black">{t('data_room.secure_repository')}</p>
           </div>
-          <h1 className="text-5xl md:text-7xl font-bold tracking-tighter text-white uppercase">Diligence Room</h1>
+          <h1 className="text-5xl md:text-7xl font-bold tracking-tighter text-white uppercase">{t('data_room.title')}</h1>
           <div className="flex items-center gap-4 text-slate-400">
              <div className="px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-full text-[9px] text-emerald-500 font-black uppercase tracking-widest">
-               {deal?.title || 'Unknown Asset'}
+               {deal?.title || t('data_room.unknown_asset')}
              </div>
              <p className="text-xs font-light">ID: {dealId?.slice(0, 8).toUpperCase()}</p>
           </div>
         </div>
         <div className="flex gap-3">
           <button className="flex items-center gap-3 px-6 py-4 bg-slate-900 border border-slate-800 text-white text-xs uppercase font-black tracking-widest hover:bg-slate-800 transition-all rounded-2xl">
-            <Upload size={16} /> Bulk Upload
+            <Upload size={16} /> {t('data_room.bulk_upload')}
           </button>
         </div>
       </header>
@@ -161,10 +163,10 @@ export default function DataRoom() {
       {/* Stats Summary */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[
-          { icon: Eye, label: 'Audit Trail', value: '412 Views', color: 'blue' },
-          { icon: Timer, label: 'Engagement', value: '9m 31s', color: 'emerald' },
-          { icon: Download, label: 'Exfiltration', value: '86 DLs', color: 'orange' },
-          { icon: Fingerprint, label: 'Protection', value: 'Watermarked', color: 'purple' },
+          { icon: Eye, label: t('data_room.stats.audit_trail'), value: t('data_room.stats.views', { count: 412 }), color: 'blue' },
+          { icon: Timer, label: t('data_room.stats.engagement'), value: '9m 31s', color: 'emerald' },
+          { icon: Download, label: t('data_room.stats.exfiltration'), value: t('data_room.stats.downloads', { count: 86 }), color: 'orange' },
+          { icon: Fingerprint, label: t('data_room.stats.protection'), value: t('data_room.stats.watermarked'), color: 'purple' },
         ].map((metric) => (
           <div key={metric.label} className="bg-slate-900/40 border border-slate-800/60 p-6 rounded-[2rem] space-y-2">
             <div className={`text-${metric.color}-500 mb-4`}><metric.icon size={18} /></div>
@@ -178,7 +180,7 @@ export default function DataRoom() {
         {/* Navigation Sidebar */}
         <aside className="lg:col-span-3 space-y-8">
           <div className="space-y-4">
-            <p className="text-[10px] uppercase tracking-[0.3em] font-black text-slate-500 px-4">Directory Stack</p>
+            <p className="text-[10px] uppercase tracking-[0.3em] font-black text-slate-500 px-4">{t('data_room.directory_stack')}</p>
             <div className="space-y-2">
               {folders.map((folder) => (
                 <button
@@ -192,7 +194,7 @@ export default function DataRoom() {
                 >
                   <div className="flex items-center gap-3">
                     <folder.icon size={16} className={activeFolder === folder.name ? 'text-slate-950' : 'text-slate-500 group-hover:text-emerald-500'} />
-                    <span className="text-[11px] font-black uppercase tracking-widest">{folder.name}</span>
+                    <span className="text-[11px] font-black uppercase tracking-widest">{t(`data_room.folders.${folder.name.toLowerCase()}`, { defaultValue: folder.name })}</span>
                   </div>
                   <span className={`text-[10px] font-mono font-bold ${activeFolder === folder.name ? 'opacity-60' : 'text-slate-600'}`}>{folder.count}</span>
                 </button>
@@ -203,10 +205,10 @@ export default function DataRoom() {
           <div className="p-6 bg-emerald-500/5 border border-emerald-500/10 rounded-[2rem] space-y-4">
             <div className="flex items-center gap-2 text-emerald-500">
               <ShieldCheck size={14} />
-              <span className="text-[10px] font-black uppercase tracking-widest">Vault Protected</span>
+              <span className="text-[10px] font-black uppercase tracking-widest">{t('data_room.vault_protected')}</span>
             </div>
             <p className="text-[10px] text-slate-500 leading-relaxed font-medium uppercase">
-              Tất cả tài liệu được đóng dấu <span className="text-white italic">{profile?.email || 'Identity'}</span>. Mọi hành vi chụp màn hình đều được theo dõi.
+              {t('data_room.watermark_prefix')} <span className="text-white italic">{profile?.email || t('data_room.identity')}</span>. {t('data_room.watermark_suffix')}
             </p>
           </div>
         </aside>
@@ -215,7 +217,7 @@ export default function DataRoom() {
         <main className="lg:col-span-9 space-y-6">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-900/30 p-4 rounded-3xl border border-slate-800/50">
             <div className="flex items-center gap-4 px-2">
-              <h3 className="text-2xl font-bold text-white tracking-tighter uppercase">{activeFolder}</h3>
+              <h3 className="text-2xl font-bold text-white tracking-tighter uppercase">{t(`data_room.folders.${activeFolder.toLowerCase()}`, { defaultValue: activeFolder })}</h3>
               <div className="h-4 w-px bg-slate-800" />
               <span className="text-[10px] text-slate-500 font-mono">/root/{activeFolder.toLowerCase()}</span>
             </div>
@@ -223,7 +225,7 @@ export default function DataRoom() {
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-600" size={14} />
               <input 
                 className="bg-slate-950/50 border border-slate-800 py-3 pl-10 pr-6 text-[10px] uppercase tracking-widest font-bold text-white focus:outline-none focus:border-emerald-500/50 rounded-xl min-w-[280px] transition-all" 
-                placeholder="Search encrypted files..." 
+                placeholder={t('data_room.search_placeholder')} 
               />
             </div>
           </div>
@@ -252,7 +254,7 @@ export default function DataRoom() {
                         <div className="flex gap-3 mt-1">
                           <p className="text-[9px] text-slate-600 font-black uppercase tracking-widest">{file.size}</p>
                           <span className="text-[9px] text-slate-800">•</span>
-                          <p className="text-[9px] text-slate-600 font-black uppercase tracking-widest">{file.permission}</p>
+                          <p className="text-[9px] text-slate-600 font-black uppercase tracking-widest">{t(`data_room.permissions.${file.permission.toLowerCase().replace(/\s+/g, '_')}`, { defaultValue: file.permission })}</p>
                         </div>
                       </div>
                     </div>
@@ -260,20 +262,20 @@ export default function DataRoom() {
                     <div className="flex items-center gap-8">
                       <div className="hidden xl:block text-right">
                         <p className="text-[10px] text-slate-400 font-mono">{file.viewed}</p>
-                        <p className="text-[9px] text-slate-600 uppercase font-black tracking-widest">Avg Session</p>
+                        <p className="text-[9px] text-slate-600 uppercase font-black tracking-widest">{t('data_room.avg_session')}</p>
                       </div>
                       <div className="flex items-center gap-2">
                         <button 
                           onClick={() => logFileAction('view', file)}
                           className="p-3 bg-slate-800 rounded-xl text-slate-400 hover:bg-white hover:text-slate-950 transition-all"
-                          title="View Document"
+                          title={t('data_room.view_document')}
                         >
                           <Eye size={16} />
                         </button>
                         <button 
                           onClick={() => logFileAction('download', file)}
                           className="p-3 bg-slate-800 rounded-xl text-slate-400 hover:bg-emerald-500 hover:text-slate-950 transition-all shadow-lg shadow-emerald-500/0 hover:shadow-emerald-500/20"
-                          title="Download Secure File"
+                          title={t('data_room.download_secure_file')}
                         >
                           <Download size={16} />
                         </button>
@@ -289,9 +291,9 @@ export default function DataRoom() {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4">
             {[
-              { label: 'Export Policy', text: 'View only prevents raw file export.', icon: AlertCircle },
-              { label: 'Audit Trail', text: 'Download access is audited per user.', icon: Fingerprint },
-              { label: 'Security', text: 'Screenshot blocking is active.', icon: Lock },
+              { label: t('data_room.policy.export_policy'), text: t('data_room.policy.export_text'), icon: AlertCircle },
+              { label: t('data_room.policy.audit_trail'), text: t('data_room.policy.audit_text'), icon: Fingerprint },
+              { label: t('data_room.policy.security'), text: t('data_room.policy.security_text'), icon: Lock },
             ].map((item) => (
               <div key={item.label} className="p-5 bg-slate-900/20 border border-slate-800/40 rounded-2xl flex gap-3 items-start">
                 <item.icon size={14} className="text-slate-600 mt-0.5" />
