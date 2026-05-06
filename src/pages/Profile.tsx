@@ -29,6 +29,7 @@ import {
 import { useAuth } from '../components/AuthContext';
 import { db } from '../lib/firebase';
 import { kycChecklist } from '../lib/mockData';
+import { useTranslation } from 'react-i18next';
 
 const compressImage = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
@@ -125,6 +126,7 @@ const compressBase64Image = (base64: string): Promise<string> => {
 };
 
 export default function Profile() {
+  const { t } = useTranslation();
   const { user, profile } = useAuth();
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -163,8 +165,8 @@ export default function Profile() {
   const statusConfig = useMemo(() => {
     if (kycStatus === 'verified') {
       return {
-        label: 'Verified',
-        description: 'Your identity has been verified. You can access eligible private deal workflows.',
+        label: t('profile.kyc_status.verified'),
+        description: t('profile.kyc_status.verified_description'),
         icon: <CheckCircle2 size={18} />,
         badgeClass: 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400',
         panelClass: 'border-emerald-500/20 bg-emerald-500/10'
@@ -173,8 +175,8 @@ export default function Profile() {
 
     if (kycStatus === 'pending') {
       return {
-        label: 'In Review',
-        description: 'Your submitted CCCD and face image are waiting for compliance review.',
+        label: t('profile.kyc_status.in_review'),
+        description: t('profile.kyc_status.in_review_description'),
         icon: <ShieldCheck size={18} />,
         badgeClass: 'border-orange-500/20 bg-orange-500/10 text-orange-400',
         panelClass: 'border-orange-500/20 bg-orange-500/10'
@@ -183,8 +185,8 @@ export default function Profile() {
 
     if (kycStatus === 'rejected') {
       return {
-        label: 'Rejected',
-        description: 'Your previous verification was rejected. Please resubmit clear and valid images.',
+        label: t('profile.kyc_status.rejected'),
+        description: t('profile.kyc_status.rejected_description'),
         icon: <ShieldAlert size={18} />,
         badgeClass: 'border-red-500/20 bg-red-500/10 text-red-400',
         panelClass: 'border-red-500/20 bg-red-500/10'
@@ -192,13 +194,13 @@ export default function Profile() {
     }
 
     return {
-      label: 'Not Verified',
-      description: 'Upload both sides of your CCCD and capture your face to start verification.',
+      label: t('profile.kyc_status.not_verified'),
+      description: t('profile.kyc_status.not_verified_description'),
       icon: <ShieldAlert size={18} />,
       badgeClass: 'border-slate-700 bg-slate-900 text-slate-400',
       panelClass: 'border-slate-800 bg-slate-900/70'
     };
-  }, [kycStatus]);
+  }, [kycStatus, t]);
 
   const canSubmitKyc =
     kycStatus === 'not_started' ||
@@ -216,7 +218,7 @@ export default function Profile() {
 
     try {
       await updateDoc(doc(db, 'users', user.uid), data);
-      setMessage('Profile saved. Role and country have been updated.');
+      setMessage(t('profile.messages.profile_saved'));
     } catch (updateError: any) {
       console.error('Profile update failed:', updateError);
 
@@ -227,17 +229,17 @@ export default function Profile() {
         );
 
         setMessage(
-          'Firestore rules are blocking this update, so the profile was saved locally for this browser.'
+          t('profile.messages.firestore_local_save')
         );
 
         setError(
-          'For production, publish the updated firestore.rules file to the same Firestore database used by this app.'
+          t('profile.messages.publish_rules')
         );
       } else {
         setError(
           updateError instanceof Error
             ? updateError.message
-            : 'Profile update failed.'
+            : t('profile.errors.profile_update_failed')
         );
       }
     } finally {
@@ -268,7 +270,7 @@ export default function Profile() {
       }, 100);
     } catch (cameraError) {
       console.error('Camera open failed:', cameraError);
-      setError('Cannot access camera. Please allow camera permission and try again.');
+      setError(t('profile.errors.camera_access'));
     }
   };
 
@@ -293,7 +295,7 @@ export default function Profile() {
     const ctx = canvas.getContext('2d');
 
     if (!ctx) {
-      setError('Cannot capture face image.');
+      setError(t('profile.errors.face_capture'));
       return;
     }
 
@@ -319,25 +321,25 @@ export default function Profile() {
     if (!user) return;
 
     if (!cccdFront || !cccdBack || !faceImage) {
-      setError('Please upload CCCD front, CCCD back, and capture your face.');
+      setError(t('profile.errors.upload_all_required'));
       return;
     }
 
     setUpdating(true);
     setMessage(null);
     setError(null);
-    setUploadProgress('Preparing CCCD images...');
+    setUploadProgress(t('profile.progress.preparing_front'));
 
     try {
       const cccdFrontUrl = await compressImage(cccdFront);
 
-      setUploadProgress('Preparing CCCD back image...');
+      setUploadProgress(t('profile.progress.preparing_back'));
       const cccdBackUrl = await compressImage(cccdBack);
 
-      setUploadProgress('Preparing face verification image...');
+      setUploadProgress(t('profile.progress.preparing_face'));
       const faceImageUrl = faceImage;
 
-      setUploadProgress('Saving verification profile...');
+      setUploadProgress(t('profile.progress.saving_profile'));
 
       await updateDoc(doc(db, 'users', user.uid), {
         kycStatus: 'pending'
@@ -366,7 +368,7 @@ export default function Profile() {
         { merge: true }
       );
 
-      setMessage('KYC submitted successfully. Your CCCD and face image are now in review.');
+      setMessage(t('profile.messages.kyc_submitted'));
       resetKycForm();
     } catch (err: any) {
       console.error('KYC submission failed:', err);
@@ -374,7 +376,7 @@ export default function Profile() {
       setError(
         err instanceof Error
           ? err.message
-          : 'KYC submission failed.'
+          : t('profile.errors.kyc_submission_failed')
       );
     } finally {
       setUpdating(false);
@@ -401,18 +403,17 @@ export default function Profile() {
             <div className="inline-flex items-center gap-3 px-4 py-2 rounded-full bg-emerald-500/10 border border-emerald-500/20">
               <User size={14} className="text-emerald-400" />
               <span className="text-[10px] uppercase tracking-[0.3em] text-emerald-400 font-black">
-                Identity Workspace
+                {t('profile.identity_workspace')}
               </span>
             </div>
 
             <div>
               <h1 className="text-5xl md:text-7xl font-black tracking-tight text-white">
-                Profile & KYC
+                {t('profile.title')}
               </h1>
 
               <p className="mt-5 max-w-2xl text-sm md:text-base text-slate-400 leading-8">
-                Upload your CCCD front, CCCD back, and capture your face to complete identity
-                verification for restricted deal access.
+                {t('profile.description')}
               </p>
             </div>
           </div>
@@ -425,7 +426,7 @@ export default function Profile() {
 
               <div>
                 <p className="text-[10px] uppercase tracking-[0.25em] text-slate-500 font-black">
-                  KYC Status
+                  {t('profile.kyc_status_label')}
                 </p>
                 <p className="text-lg font-black text-white mt-1">
                   {statusConfig.label}
@@ -466,7 +467,7 @@ export default function Profile() {
                 {profile.avatarUrl ? (
                   <img
                     src={profile.avatarUrl}
-                    alt={profile.name || 'User avatar'}
+                    alt={profile.name || t('profile.user_avatar')}
                     className="w-full h-full rounded-[32px] object-cover border border-slate-700 shadow-xl shadow-black/30"
                   />
                 ) : (
@@ -481,7 +482,7 @@ export default function Profile() {
               </div>
 
               <h2 className="text-2xl font-black text-white mt-6">
-                {profile.name || 'Unnamed User'}
+                {profile.name || t('profile.unnamed_user')}
               </h2>
 
               <p className="text-xs text-slate-500 break-all mt-2">
@@ -499,11 +500,11 @@ export default function Profile() {
             <div className="flex items-center justify-between gap-4 mb-5">
               <div>
                 <p className="text-[10px] uppercase tracking-[0.25em] text-slate-500 font-black">
-                  Verification
+                  {t('profile.verification')}
                 </p>
 
                 <h3 className="text-xl font-black text-white mt-2">
-                  CCCD & Face Check
+                  {t('profile.cccd_face_check')}
                 </h3>
               </div>
 
@@ -519,7 +520,7 @@ export default function Profile() {
             </div>
 
             <p className="text-xs text-slate-400 leading-6 mt-4">
-              Required: CCCD front image, CCCD back image, and live face capture from camera.
+              {t('profile.cccd_face_required')}
             </p>
 
             {canSubmitKyc && !showKycForm && (
@@ -531,7 +532,7 @@ export default function Profile() {
                     : 'bg-emerald-500 text-[#020617] hover:bg-emerald-400 shadow-lg shadow-emerald-500/20'
                 }`}
               >
-                {kycStatus === 'rejected' ? 'Resubmit KYC' : 'Start Verification'}
+                {kycStatus === 'rejected' ? t('profile.resubmit_kyc') : t('profile.start_verification')}
               </button>
             )}
 
@@ -569,11 +570,11 @@ export default function Profile() {
 
                 <div>
                   <h2 className="text-2xl font-black text-white">
-                    Account Information
+                    {t('profile.account_information')}
                   </h2>
 
                   <p className="text-xs text-slate-500 mt-1">
-                    Update your platform role and operating country.
+                    {t('profile.account_description')}
                   </p>
                 </div>
               </div>
@@ -582,21 +583,21 @@ export default function Profile() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-px bg-slate-800">
               <InfoBlock
                 icon={<User size={18} />}
-                label="Full Name"
-                value={profile.name || 'No name'}
+                label={t('profile.full_name')}
+                value={profile.name || t('profile.no_name')}
               />
 
               <InfoBlock
                 icon={<Mail size={18} />}
-                label="Email"
-                value={profile.email || 'No email'}
+                label={t('profile.email')}
+                value={profile.email || t('profile.no_email')}
                 breakText
               />
 
               <label className="bg-[#0b1120] p-6 space-y-3">
                 <span className="inline-flex items-center gap-2 text-[10px] uppercase font-black tracking-[0.25em] text-slate-500">
                   <Briefcase size={15} />
-                  Primary Role
+                  {t('profile.primary_role')}
                 </span>
 
                 <select
@@ -604,17 +605,17 @@ export default function Profile() {
                   onChange={(event) => setRole(event.target.value)}
                   className="w-full bg-[#020617] border border-slate-800 p-4 rounded-2xl text-sm text-white capitalize focus:outline-none focus:border-emerald-500/70 focus:ring-2 focus:ring-emerald-500/10 transition-all"
                 >
-                  <option value="buyer">Buyer</option>
-                  <option value="seller">Seller</option>
-                  <option value="advisor">Advisor</option>
-                  <option value="admin">Admin</option>
+                  <option value="buyer">{t('roles.buyer')}</option>
+                  <option value="seller">{t('roles.seller')}</option>
+                  <option value="advisor">{t('roles.advisor')}</option>
+                  <option value="admin">{t('roles.admin')}</option>
                 </select>
               </label>
 
               <label className="bg-[#0b1120] p-6 space-y-3">
                 <span className="inline-flex items-center gap-2 text-[10px] uppercase font-black tracking-[0.25em] text-slate-500">
                   <Globe2 size={15} />
-                  Country
+                  {t('profile.country')}
                 </span>
 
                 <input
@@ -627,8 +628,7 @@ export default function Profile() {
 
             <div className="p-6 md:p-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <p className="text-xs text-slate-500 leading-6 max-w-lg">
-                Role changes may affect marketplace permissions, data room access, and admin
-                moderation capabilities.
+                {t('profile.role_change_note')}
               </p>
 
               <button
@@ -641,7 +641,7 @@ export default function Profile() {
                 ) : (
                   <Save size={16} />
                 )}
-                {updating ? 'Saving...' : 'Save Profile'}
+                {updating ? t('common.saving') : t('profile.save_profile')}
               </button>
             </div>
           </section>
@@ -655,20 +655,20 @@ export default function Profile() {
 
                 <div>
                   <h3 className="text-xl font-black text-white">
-                    KYC Checklist
+                    {t('profile.kyc_checklist')}
                   </h3>
 
                   <p className="text-xs text-slate-500 mt-1">
-                    Minimum verification requirements.
+                    {t('profile.minimum_requirements')}
                   </p>
                 </div>
               </div>
 
               <div className="space-y-3">
                 {[
-                  'Upload CCCD front image',
-                  'Upload CCCD back image',
-                  'Capture live face image',
+                  t('profile.checklist.upload_front'),
+                  t('profile.checklist.upload_back'),
+                  t('profile.checklist.capture_face'),
                   ...kycChecklist
                 ].slice(0, 6).map((item, index) => {
                   const complete =
@@ -709,11 +709,11 @@ export default function Profile() {
 
                 <div>
                   <h3 className="text-xl font-black text-white">
-                    Verification Notes
+                    {t('profile.verification_notes')}
                   </h3>
 
                   <p className="text-xs text-slate-500 mt-1">
-                    Practical rules for this KYC flow.
+                    {t('profile.verification_notes_description')}
                   </p>
                 </div>
               </div>
@@ -721,20 +721,20 @@ export default function Profile() {
               <div className="space-y-4">
                 <SecurityItem
                   icon={<IdCard size={18} />}
-                  title="CCCD two-side review"
-                  text="The front and back images should be clear, uncropped, readable, and belong to the same person."
+                  title={t('profile.security.cccd_review_title')}
+                  text={t('profile.security.cccd_review_text')}
                 />
 
                 <SecurityItem
                   icon={<ScanFace size={18} />}
-                  title="Face capture"
-                  text="The selfie is captured directly from camera and saved for compliance review."
+                  title={t('profile.security.face_capture_title')}
+                  text={t('profile.security.face_capture_text')}
                 />
 
                 <SecurityItem
                   icon={<ShieldCheck size={18} />}
-                  title="Manual review"
-                  text="This MVP stores images for review. Automatic face matching and liveness detection need a real eKYC provider."
+                  title={t('profile.security.manual_review_title')}
+                  text={t('profile.security.manual_review_text')}
                 />
               </div>
             </section>
@@ -748,21 +748,21 @@ export default function Profile() {
 
               <div>
                 <h3 className="text-xl font-black text-white">
-                  Platform Roles
+                  {t('profile.platform_roles')}
                 </h3>
 
                 <p className="text-xs text-slate-500 mt-1">
-                  Permission groups used across the deal platform.
+                  {t('profile.platform_roles_description')}
                 </p>
               </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
               {[
-                ['Seller', 'Create and manage deals'],
-                ['Buyer', 'View and invest'],
-                ['Advisor', 'Support diligence'],
-                ['Admin', 'Moderate and approve']
+                [t('roles.seller'), t('profile.role_descriptions.seller')],
+                [t('roles.buyer'), t('profile.role_descriptions.buyer')],
+                [t('roles.advisor'), t('profile.role_descriptions.advisor')],
+                [t('roles.admin'), t('profile.role_descriptions.admin')]
               ].map(([name, text]) => (
                 <div
                   key={name}
@@ -824,6 +824,8 @@ function KycForm({
   onCancel: () => void;
   onSubmit: () => void;
 }) {
+  const { t } = useTranslation();
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
@@ -832,7 +834,7 @@ function KycForm({
     >
       <label className="block space-y-2">
         <span className="text-[10px] uppercase font-black tracking-[0.25em] text-slate-500">
-          KYC Type
+          {t('profile.kyc_form.type')}
         </span>
 
         <select
@@ -840,22 +842,22 @@ function KycForm({
           onChange={(event) => setKycType(event.target.value)}
           className="w-full bg-[#020617] border border-slate-800 p-4 rounded-2xl text-sm text-white focus:border-emerald-500/70 focus:ring-2 focus:ring-emerald-500/10 outline-none transition-all"
         >
-          <option value="individual">Individual</option>
-          <option value="business">Business</option>
+          <option value="individual">{t('profile.kyc_form.individual')}</option>
+          <option value="business">{t('profile.kyc_form.business')}</option>
         </select>
       </label>
 
       <KycUploadBox
-        label="CCCD Front"
-        description="Upload the front side of your citizen ID card."
+        label={t('profile.kyc_form.cccd_front')}
+        description={t('profile.kyc_form.cccd_front_desc')}
         file={cccdFront}
         icon={<IdCard size={22} />}
         onChange={setCccdFront}
       />
 
       <KycUploadBox
-        label="CCCD Back"
-        description="Upload the back side of your citizen ID card."
+        label={t('profile.kyc_form.cccd_back')}
+        description={t('profile.kyc_form.cccd_back_desc')}
         file={cccdBack}
         icon={<FileText size={22} />}
         onChange={setCccdBack}
@@ -870,18 +872,18 @@ function KycForm({
 
             <div>
               <p className="text-sm font-black text-white">
-                Face Verification
+                {t('profile.kyc_form.face_verification')}
               </p>
 
               <p className="text-xs text-slate-500 leading-6 mt-1">
-                Open camera and capture a clear front-facing image.
+                {t('profile.kyc_form.face_desc')}
               </p>
             </div>
           </div>
 
           {faceImage && (
             <span className="text-[9px] uppercase tracking-widest font-black text-emerald-400">
-              Captured
+              {t('profile.kyc_form.captured')}
             </span>
           )}
         </div>
@@ -904,7 +906,7 @@ function KycForm({
                 disabled={updating}
                 className="py-3 rounded-2xl border border-slate-700 text-slate-300 text-[10px] uppercase tracking-widest font-black hover:bg-slate-900 disabled:opacity-60 transition-all"
               >
-                Cancel Camera
+                {t('profile.kyc_form.cancel_camera')}
               </button>
 
               <button
@@ -912,7 +914,7 @@ function KycForm({
                 disabled={updating}
                 className="py-3 rounded-2xl bg-emerald-500 text-[#020617] text-[10px] uppercase tracking-widest font-black hover:bg-emerald-400 disabled:opacity-60 transition-all"
               >
-                Capture Face
+                {t('profile.kyc_form.capture_face')}
               </button>
             </div>
           </div>
@@ -922,7 +924,7 @@ function KycForm({
           <div className="mt-5 space-y-4">
             <img
               src={faceImage}
-              alt="Face capture"
+              alt={t('profile.kyc_form.face_capture_alt')}
               className="w-full aspect-square object-cover rounded-[22px] border border-slate-700"
             />
 
@@ -931,7 +933,7 @@ function KycForm({
               disabled={updating}
               className="w-full py-3 rounded-2xl border border-slate-700 text-slate-300 text-[10px] uppercase tracking-widest font-black hover:border-emerald-500/60 hover:text-white disabled:opacity-60 transition-all"
             >
-              Retake Face Image
+              {t('profile.kyc_form.retake_face')}
             </button>
           </div>
         )}
@@ -942,15 +944,15 @@ function KycForm({
             disabled={updating}
             className="w-full mt-5 py-4 rounded-2xl bg-emerald-500 text-[#020617] text-[10px] uppercase tracking-widest font-black hover:bg-emerald-400 disabled:opacity-60 transition-all shadow-lg shadow-emerald-500/20"
           >
-            Open Camera
+            {t('profile.kyc_form.open_camera')}
           </button>
         )}
       </div>
 
       <div className="grid grid-cols-3 gap-3">
-        <StepStatus label="Front" done={!!cccdFront} />
-        <StepStatus label="Back" done={!!cccdBack} />
-        <StepStatus label="Face" done={!!faceImage} />
+        <StepStatus label={t('profile.kyc_form.front')} done={!!cccdFront} />
+        <StepStatus label={t('profile.kyc_form.back')} done={!!cccdBack} />
+        <StepStatus label={t('profile.kyc_form.face')} done={!!faceImage} />
       </div>
 
       {uploadProgress && (
@@ -969,7 +971,7 @@ function KycForm({
           disabled={updating}
           className="flex-1 py-3 rounded-2xl border border-slate-700 text-slate-300 text-[10px] font-black uppercase tracking-widest hover:bg-slate-900 disabled:opacity-60 transition-all"
         >
-          Cancel
+          {t('common.cancel')}
         </button>
 
         <button
@@ -977,7 +979,7 @@ function KycForm({
           disabled={updating || !kycReady}
           className="flex-1 py-3 rounded-2xl bg-emerald-500 text-[#020617] text-[10px] font-black uppercase tracking-widest disabled:opacity-50 hover:bg-emerald-400 transition-all shadow-lg shadow-emerald-500/20"
         >
-          {updating ? 'Submitting...' : 'Submit KYC'}
+          {updating ? t('common.submitting') : t('profile.submit_kyc')}
         </button>
       </div>
     </motion.div>
@@ -1051,6 +1053,8 @@ function KycUploadBox({
 }
 
 function StepStatus({ label, done }: { label: string; done: boolean }) {
+  const { t } = useTranslation();
+
   return (
     <div
       className={`rounded-2xl border px-3 py-3 text-center ${
@@ -1064,7 +1068,7 @@ function StepStatus({ label, done }: { label: string; done: boolean }) {
       </p>
 
       <p className="text-[10px] mt-1">
-        {done ? 'Done' : 'Required'}
+        {done ? t('common.done') : t('common.required')}
       </p>
     </div>
   );

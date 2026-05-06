@@ -2,8 +2,10 @@ import React, { useState } from 'react';
 import { collection, query, where, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from './AuthContext';
+import { useTranslation } from 'react-i18next';
 
 export default function NDADebug() {
+  const { t } = useTranslation();
   const { user, profile } = useAuth();
   const [logs, setLogs] = useState<string[]>([]);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -268,7 +270,7 @@ export default function NDADebug() {
           onClick={() => setIsExpanded(!isExpanded)}
           className="w-full px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white text-sm font-bold flex justify-between items-center"
         >
-          🐛 NDA Debug
+          {t('debug.nda_debug')}
           <span className="text-xs">{isExpanded ? '▼' : '▶'}</span>
         </button>
 
@@ -279,55 +281,55 @@ export default function NDADebug() {
                 onClick={quickSummary}
                 className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded"
               >
-                Summary
+                {t('debug.summary')}
               </button>
               <button
                 onClick={debug1_allNdas}
                 className="px-2 py-1 bg-green-600 hover:bg-green-700 text-white text-xs rounded"
               >
-                All NDAs
+                {t('debug.all_ndas')}
               </button>
               <button
                 onClick={debug2_userProfile}
                 className="px-2 py-1 bg-green-600 hover:bg-green-700 text-white text-xs rounded"
               >
-                Profile
+                {t('debug.profile')}
               </button>
               <button
                 onClick={debug3_sellerNdas}
                 className="px-2 py-1 bg-green-600 hover:bg-green-700 text-white text-xs rounded"
               >
-                My NDAs
+                {t('debug.my_ndas')}
               </button>
               <button
                 onClick={debug4_publishedDeals}
                 className="px-2 py-1 bg-green-600 hover:bg-green-700 text-white text-xs rounded"
               >
-                Deals
+                {t('debug.deals')}
               </button>
               <button
                 onClick={debug5_createTestNda}
                 className="px-2 py-1 bg-orange-600 hover:bg-orange-700 text-white text-xs rounded"
               >
-                Create Test
+                {t('debug.create_test')}
               </button>
               <button
                 onClick={debug6_auditLogs}
                 className="px-2 py-1 bg-green-600 hover:bg-green-700 text-white text-xs rounded"
               >
-                Logs
+                {t('debug.logs')}
               </button>
               <button
                 onClick={clearLogs}
                 className="px-2 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded"
               >
-                Clear
+                {t('debug.clear')}
               </button>
             </div>
 
             <div className="bg-black text-green-400 p-2 rounded font-mono text-xs space-y-1 max-h-64 overflow-y-auto">
               {logs.length === 0 ? (
-                <div className="text-gray-500">Click a button to debug...</div>
+                <div className="text-gray-500">{t('debug.empty')}</div>
               ) : (
                 logs.map((log, i) => (
                   <div key={i} className="whitespace-pre-wrap break-words">

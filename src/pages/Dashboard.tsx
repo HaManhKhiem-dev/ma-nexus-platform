@@ -22,10 +22,12 @@ import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { formatCurrency } from '../lib/utils';
 import { sampleDeals } from '../lib/mockData';
-import { canAdminModerate, statusLabel } from '../lib/compliance';
+import { canAdminModerate, statusLabel, normalizeDealStatus } from '../lib/compliance';
 import { writeAuditLog } from '../lib/audit';
+import { useTranslation } from 'react-i18next';
 
 export default function Dashboard() {
+  const { t } = useTranslation();
   const { user, profile } = useAuth();
   const [myDeals, setMyDeals] = useState<any[]>([]);
   const [moderationDeals, setModerationDeals] = useState<any[]>([]);
@@ -74,6 +76,8 @@ export default function Dashboard() {
   const pendingNdas = myNdas.filter((nda) => nda.status === 'requested').length || 3;
   const isSeller = profile?.role === 'seller';
   const isAdmin = canAdminModerate(profile);
+  const dealStatusLabel = (status?: string) => t(`statuses.deals.${normalizeDealStatus(status)}`, { defaultValue: statusLabel(status) });
+  const ndaStatusLabel = (status?: string) => t(`statuses.nda.${String(status || 'requested').toLowerCase().replace(/\s+/g, '_')}`, { defaultValue: status || 'requested' });
 
   const updateNdaStatus = async (ndaId: string, status: 'signed' | 'rejected') => {
     if (!user) return;
@@ -92,13 +96,13 @@ export default function Dashboard() {
         targetType: 'nda',
         targetId: ndaId,
       });
-      setNdaMessage(status === 'signed' ? 'NDA approved. Buyer can now access private deal materials.' : 'NDA rejected.');
+      setNdaMessage(status === 'signed' ? t('dashboard.messages.nda_approved') : t('dashboard.messages.nda_rejected'));
     } catch (error: any) {
       console.error('NDA update failed:', error);
       if (error?.code === 'permission-denied') {
-        setNdaError('Firestore rules are blocking NDA approval. Publish the updated firestore.rules file to allow seller NDA updates.');
+        setNdaError(t('dashboard.errors.firestore_rules_blocking_nda'));
       } else {
-setNdaError(error instanceof Error ? error.message : 'NDA update failed.');
+setNdaError(error instanceof Error ? error.message : t('dashboard.errors.nda_update_failed'));
       }
     }
   };
@@ -122,10 +126,10 @@ setNdaError(error instanceof Error ? error.message : 'NDA update failed.');
         targetId: dealId,
         dealId,
       });
-      setNdaMessage(`Deal moved to ${statusLabel(status)}.`);
+      setNdaMessage(t('dashboard.messages.deal_moved', { status: dealStatusLabel(status) }));
     } catch (error: any) {
       console.error('Deal moderation failed:', error);
-      setNdaError(error instanceof Error ? error.message : 'Deal moderation failed.');
+      setNdaError(error instanceof Error ? error.message : t('dashboard.errors.deal_moderation_failed'));
     }
   };
 
@@ -146,10 +150,10 @@ setNdaError(error instanceof Error ? error.message : 'NDA update failed.');
         targetType: 'user',
         targetId: targetUid,
       });
-      setNdaMessage(`KYC ${status} for user ${targetUid}.`);
+      setNdaMessage(t('dashboard.messages.kyc_status_for_user', { status, user: targetUid }));
     } catch (error) {
       console.error('KYC moderation failed:', error);
-      setNdaError(error instanceof Error ? error.message : 'KYC moderation failed.');
+      setNdaError(error instanceof Error ? error.message : t('dashboard.errors.kyc_moderation_failed'));
     }
   };
 
@@ -160,25 +164,25 @@ setNdaError(error instanceof Error ? error.message : 'NDA update failed.');
         <div className="space-y-4">
           <div className="flex items-center gap-2 text-emerald-500">
             <Activity size={14} className="animate-pulse" />
-            <p className="text-[10px] uppercase tracking-[0.4em] font-black">Live Operations</p>
+            <p className="text-[10px] uppercase tracking-[0.4em] font-black">{t('dashboard.live_operations')}</p>
           </div>
-          <h1 className="text-5xl md:text-7xl font-bold tracking-tighter text-white uppercase">Control Center</h1>
+          <h1 className="text-5xl md:text-7xl font-bold tracking-tighter text-white uppercase">{t('dashboard.title')}</h1>
           <p className="text-slate-400 max-w-2xl font-light leading-relaxed">
-            Chào mừng trở lại, <span className="text-white font-medium">{profile?.name || 'Thịnh'}</span>. Hệ thống đã đồng bộ hóa dữ liệu danh mục đầu tư và các yêu cầu pháp lý mới nhất.
+            {t('dashboard.welcome_prefix')} <span className="text-white font-medium">{profile?.name || t('dashboard.default_name')}</span>. {t('dashboard.welcome_suffix')}
           </p>
         </div>
         <Link to="/create-deal" className="group flex items-center gap-3 px-8 py-4 bg-emerald-500 text-slate-950 text-xs uppercase font-black tracking-widest hover:bg-emerald-400 transition-all rounded-2xl shadow-lg shadow-emerald-500/10">
-          <Plus size={16} /> New Asset Listing
+          <Plus size={16} /> {t('dashboard.new_asset_listing')}
         </Link>
       </header>
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         {[
-          { icon: Briefcase, label: 'Active Listings', value: displayDeals.length, trend: '+12%', color: 'emerald' },
-          { icon: FileCheck, label: 'Signed NDAs', value: myNdas.filter((n) => n.status === 'signed').length || 12, trend: '+5%', color: 'blue' },
-          { icon: Clock, label: 'Pending Actions', value: pendingNdas, trend: 'High Priority', color: 'orange' },
-          { icon: TrendingUp, label: 'Pipeline Value', value: '$58.5M', trend: '+2.4M', color: 'white' },
+          { icon: Briefcase, label: t('dashboard.stats.active_listings'), value: displayDeals.length, trend: '+12%', color: 'emerald' },
+          { icon: FileCheck, label: t('dashboard.stats.signed_ndas'), value: myNdas.filter((n) => n.status === 'signed').length || 12, trend: '+5%', color: 'blue' },
+          { icon: Clock, label: t('dashboard.stats.pending_actions'), value: pendingNdas, trend: t('dashboard.high_priority'), color: 'orange' },
+          { icon: TrendingUp, label: t('dashboard.stats.pipeline_value'), value: '$58.5M', trend: '+2.4M', color: 'white' },
         ].map((metric, idx) => (
           <motion.div 
             key={metric.label}
@@ -219,9 +223,9 @@ setNdaError(error instanceof Error ? error.message : 'NDA update failed.');
         <div className="lg:col-span-8 space-y-6">
           <div className="flex items-center justify-between px-2">
             <h3 className="text-[11px] uppercase tracking-[0.4em] font-black text-slate-500 flex items-center gap-2">
-              <Activity size={14} className="text-emerald-500" /> Portfolio Health
+              <Activity size={14} className="text-emerald-500" /> {t('dashboard.portfolio_health')}
             </h3>
-            <Link to="/marketplace" className="text-[10px] font-black uppercase tracking-widest text-emerald-500 hover:text-white transition-colors">Explorer Marketplace</Link>
+            <Link to="/marketplace" className="text-[10px] font-black uppercase tracking-widest text-emerald-500 hover:text-white transition-colors">{t('dashboard.explorer_marketplace')}</Link>
           </div>
 
           <div className="space-y-3">
@@ -241,10 +245,10 @@ setNdaError(error instanceof Error ? error.message : 'NDA update failed.');
                 <div className="flex items-center gap-10">
                   <div className="text-right">
                     <p className="text-sm font-mono font-bold text-white tracking-tighter">{formatCurrency(Number(deal.valuation || 0))}</p>
-                    <p className="text-[9px] text-slate-600 uppercase font-black tracking-widest mt-1 text-right">Valuation</p>
+                    <p className="text-[9px] text-slate-600 uppercase font-black tracking-widest mt-1 text-right">{t('dashboard.valuation')}</p>
                   </div>
                   <div className="flex gap-2">
-                    {['Audit', statusLabel(deal.status || 'published')].map((stage) => (
+                    {[t('dashboard.audit'), dealStatusLabel(deal.status || 'published')].map((stage) => (
                       <span key={stage} className="px-3 py-1.5 bg-slate-800/50 border border-slate-700/50 rounded-lg text-[9px] uppercase tracking-widest font-black text-slate-400">
                         {stage}
                       </span>
@@ -261,13 +265,13 @@ setNdaError(error instanceof Error ? error.message : 'NDA update failed.');
 
         {/* Right Activity Queue */}
         <div className="lg:col-span-4 space-y-6">
-          <h3 className="text-[11px] uppercase tracking-[0.4em] font-black text-slate-500 px-2">Action Items</h3>
+          <h3 className="text-[11px] uppercase tracking-[0.4em] font-black text-slate-500 px-2">{t('dashboard.action_items')}</h3>
           <div className="bg-slate-900/20 border border-slate-800/60 rounded-[2.5rem] divide-y divide-slate-800/60 overflow-hidden">
             {[
-              { icon: ShieldCheck, label: 'KYC review', meta: '2 profiles pending', color: 'emerald' },
-              { icon: FileCheck, label: 'NDA request', meta: `${pendingNdas} awaiting approval`, color: 'blue' },
-              { icon: MessageSquare, label: 'Negotiation', meta: 'New message received', color: 'purple' },
-              { icon: Gavel, label: 'Legal Milestone', meta: 'SPA Draft Ready', color: 'orange' },
+              { icon: ShieldCheck, label: t('dashboard.actions.kyc_review'), meta: t('dashboard.actions.profiles_pending', { count: 2 }), color: 'emerald' },
+              { icon: FileCheck, label: t('dashboard.actions.nda_request'), meta: t('dashboard.actions.awaiting_approval', { count: pendingNdas }), color: 'blue' },
+              { icon: MessageSquare, label: t('dashboard.actions.negotiation'), meta: t('dashboard.actions.new_message'), color: 'purple' },
+              { icon: Gavel, label: t('dashboard.actions.legal_milestone'), meta: t('dashboard.actions.spa_draft_ready'), color: 'orange' },
             ].map((item) => (
               <div key={item.label} className="p-6 flex items-start gap-5 hover:bg-slate-900/40 transition-colors cursor-pointer group">
                 <div className={`w-10 h-10 rounded-xl bg-${item.color}-500/10 flex items-center justify-center text-${item.color}-500 group-hover:scale-110 transition-transform`}>
@@ -289,12 +293,12 @@ setNdaError(error instanceof Error ? error.message : 'NDA update failed.');
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div>
               <h3 className="text-2xl font-bold text-white tracking-tighter uppercase flex items-center gap-3">
-                <ShieldCheck className="text-emerald-500" /> Administrative Protocol
+                <ShieldCheck className="text-emerald-500" /> {t('dashboard.admin.protocol')}
               </h3>
-              <p className="text-xs text-slate-500 font-medium mt-1">Hệ thống phê duyệt đa tầng cho tài sản và danh tính người dùng.</p>
+              <p className="text-xs text-slate-500 font-medium mt-1">{t('dashboard.admin.description')}</p>
             </div>
             <div className="flex gap-2">
-              <span className="px-3 py-1 bg-emerald-500/10 rounded-full text-[9px] text-emerald-500 font-black tracking-widest uppercase">Lvl 4 Auth</span>
+              <span className="px-3 py-1 bg-emerald-500/10 rounded-full text-[9px] text-emerald-500 font-black tracking-widest uppercase">{t('dashboard.admin.lvl4_auth')}</span>
             </div>
           </div>
 
@@ -302,22 +306,22 @@ setNdaError(error instanceof Error ? error.message : 'NDA update failed.');
             {/* KYC Admin Card */}
             <div className="bg-slate-900/60 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl">
               <div className="p-5 border-b border-slate-800 bg-slate-800/30 flex justify-between items-center">
-                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Identity Verification</span>
-                <span className="text-[10px] text-emerald-500 font-bold">{kycUsers.length} Pending</span>
+                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">{t('dashboard.admin.identity_verification')}</span>
+                <span className="text-[10px] text-emerald-500 font-bold">{t('dashboard.admin.pending_count', { count: kycUsers.length })}</span>
               </div>
               <div className="divide-y divide-slate-800">
                 {kycUsers.length === 0 ? (
-                  <div className="p-10 text-center text-xs text-slate-600 font-bold uppercase tracking-widest italic">All identities cleared</div>
+                  <div className="p-10 text-center text-xs text-slate-600 font-bold uppercase tracking-widest italic">{t('dashboard.admin.all_identities_cleared')}</div>
                 ) : (
                   kycUsers.map((item) => (
                     <div key={item.id} className="p-6 flex items-center justify-between bg-transparent hover:bg-slate-800/30 transition-colors">
                       <div>
-                        <p className="text-sm font-bold text-white tracking-tight uppercase">{item.name || 'Anonymous'}</p>
+                        <p className="text-sm font-bold text-white tracking-tight uppercase">{item.name || t('dashboard.admin.anonymous')}</p>
                         <p className="text-[10px] text-slate-500 font-mono mt-1">{item.email}</p>
                       </div>
                       <div className="flex gap-2">
-                        <button onClick={() => updateKycStatus(item.id, 'rejected')} className="px-4 py-2 bg-slate-800 rounded-xl text-[9px] font-black uppercase text-red-400 hover:bg-red-500/20 transition-all">Reject</button>
-                        <button onClick={() => updateKycStatus(item.id, 'verified')} className="px-4 py-2 bg-white rounded-xl text-[9px] font-black uppercase text-slate-950 hover:bg-emerald-400 transition-all">Verify</button>
+                        <button onClick={() => updateKycStatus(item.id, 'rejected')} className="px-4 py-2 bg-slate-800 rounded-xl text-[9px] font-black uppercase text-red-400 hover:bg-red-500/20 transition-all">{t('dashboard.admin.reject')}</button>
+                        <button onClick={() => updateKycStatus(item.id, 'verified')} className="px-4 py-2 bg-white rounded-xl text-[9px] font-black uppercase text-slate-950 hover:bg-emerald-400 transition-all">{t('dashboard.admin.verify')}</button>
                       </div>
                     </div>
                   ))
@@ -328,12 +332,12 @@ setNdaError(error instanceof Error ? error.message : 'NDA update failed.');
             {/* Deal Admin Card */}
             <div className="bg-slate-900/60 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl">
               <div className="p-5 border-b border-slate-800 bg-slate-800/30 flex justify-between items-center">
-                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Asset Moderation</span>
-                <span className="text-[10px] text-emerald-500 font-bold">Priority Review</span>
+                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">{t('dashboard.admin.asset_moderation')}</span>
+                <span className="text-[10px] text-emerald-500 font-bold">{t('dashboard.admin.priority_review')}</span>
               </div>
               <div className="divide-y divide-slate-800 text-white">
                 {moderationDeals.filter(d => ['submitted', 'under_review'].includes(d.status)).length === 0 ? (
-                  <div className="p-10 text-center text-xs text-slate-600 font-bold uppercase tracking-widest italic">Asset pipeline empty</div>
+                  <div className="p-10 text-center text-xs text-slate-600 font-bold uppercase tracking-widest italic">{t('dashboard.admin.asset_pipeline_empty')}</div>
                 ) : (
                   moderationDeals.filter(d => ['submitted', 'under_review'].includes(d.status)).map((deal) => (
                     <div key={deal.id} className="p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -342,7 +346,7 @@ setNdaError(error instanceof Error ? error.message : 'NDA update failed.');
                         <p className="text-[10px] text-slate-500 font-medium uppercase tracking-widest mt-1">{deal.industry} • {deal.location}</p>
                       </div>
                       <button onClick={() => updateDealStatus(deal.id, 'approved')} className="px-5 py-2.5 bg-emerald-500 rounded-xl text-[10px] font-black uppercase text-slate-950 hover:bg-emerald-400 transition-all shadow-lg shadow-emerald-500/20">
-                        Review Asset
+                        {t('dashboard.admin.review_asset')}
                       </button>
                     </div>
                   ))
@@ -356,12 +360,12 @@ setNdaError(error instanceof Error ? error.message : 'NDA update failed.');
       {/* NDA Section (Enhanced) */}
       <section className="space-y-6">
         <div className="flex items-center justify-between px-2">
-          <h3 className="text-[11px] uppercase tracking-[0.4em] font-black text-slate-500">Legal Documents & NDA Access</h3>
+          <h3 className="text-[11px] uppercase tracking-[0.4em] font-black text-slate-500">{t('dashboard.nda.title')}</h3>
           <ShieldCheck size={14} className="text-slate-600" />
         </div>
         <div className="bg-slate-900/20 border border-slate-800/60 rounded-[2.5rem] overflow-hidden shadow-xl">
           {myNdas.length === 0 ? (
-            <div className="p-16 text-center text-xs text-slate-600 font-black uppercase tracking-[0.2em] italic">No active legal requests</div>
+            <div className="p-16 text-center text-xs text-slate-600 font-black uppercase tracking-[0.2em] italic">{t('dashboard.nda.no_active_requests')}</div>
           ) : (
             <div className="divide-y divide-slate-800/60">
               {myNdas.map((nda) => {
@@ -378,8 +382,8 @@ setNdaError(error instanceof Error ? error.message : 'NDA update failed.');
                         <FileCheck size={20} />
                       </div>
                       <div>
-                        <p className="text-xs uppercase tracking-widest font-black text-white">Mutual NDA Request</p>
-                        <p className="text-[10px] text-slate-500 font-mono mt-1 italic">{isSeller ? nda.buyerEmail || nda.buyerUid : `Asset ID: ${nda.dealId.slice(0, 8)}...`}</p>
+                        <p className="text-xs uppercase tracking-widest font-black text-white">{t('dashboard.nda.mutual_request')}</p>
+                        <p className="text-[10px] text-slate-500 font-mono mt-1 italic">{isSeller ? nda.buyerEmail || nda.buyerUid : `${t('dashboard.nda.asset_id')}: ${nda.dealId.slice(0, 8)}...`}</p>
                       </div>
                     </div>
                     <div className="lg:col-span-3">
@@ -388,18 +392,18 @@ setNdaError(error instanceof Error ? error.message : 'NDA update failed.');
                         nda.status === 'rejected' ? 'bg-red-500/10 border-red-500/30 text-red-500' :
                         'bg-blue-500/10 border-blue-500/30 text-blue-500'
                       }`}>
-                        {nda.status}
+                        {ndaStatusLabel(nda.status)}
                       </span>
                     </div>
                     <div className="lg:col-span-5 flex justify-end items-center gap-4">
                       {isSeller && nda.status === 'requested' ? (
                         <div className="flex gap-2">
-                           <button onClick={() => updateNdaStatus(nda.id, 'rejected')} className="px-5 py-2.5 bg-slate-800 rounded-xl text-[10px] font-black uppercase text-red-400 hover:bg-red-500/20 transition-all">Deny</button>
-                           <button onClick={() => updateNdaStatus(nda.id, 'signed')} className="px-5 py-2.5 bg-white rounded-xl text-[10px] font-black uppercase text-slate-950 hover:bg-emerald-400 transition-all">Execute Sign</button>
+                           <button onClick={() => updateNdaStatus(nda.id, 'rejected')} className="px-5 py-2.5 bg-slate-800 rounded-xl text-[10px] font-black uppercase text-red-400 hover:bg-red-500/20 transition-all">{t('dashboard.nda.deny')}</button>
+                           <button onClick={() => updateNdaStatus(nda.id, 'signed')} className="px-5 py-2.5 bg-white rounded-xl text-[10px] font-black uppercase text-slate-950 hover:bg-emerald-400 transition-all">{t('dashboard.nda.execute_sign')}</button>
                         </div>
                       ) : (
                         <p className="text-[10px] uppercase font-black tracking-widest text-slate-600">
-                          {nda.status === 'signed' ? 'Watermarked Access Granted' : 'Awaiting Counter-signature'}
+                          {nda.status === 'signed' ? t('dashboard.nda.watermarked_access_granted') : t('dashboard.nda.awaiting_counter_signature')}
                         </p>
                       )}
                     </div>
@@ -414,9 +418,9 @@ setNdaError(error instanceof Error ? error.message : 'NDA update failed.');
       {/* Footer System Info */}
       <footer className="grid grid-cols-1 md:grid-cols-3 gap-8 pt-10 border-t border-slate-800/60">
         {[
-          { title: 'Encrypted Infrastructure', desc: 'Dữ liệu được mã hóa chuẩn AES-256 quân đội.' },
-          { title: 'Global Compliance', desc: 'Tuân thủ các giao thức KYC/AML quốc tế.' },
-          { title: 'Real-time Audit', desc: 'Mọi hoạt động được ghi lại vào nhật ký hệ thống.' },
+          { title: t('dashboard.footer.encrypted_infrastructure'), desc: t('dashboard.footer.encrypted_desc') },
+          { title: t('dashboard.footer.global_compliance'), desc: t('dashboard.footer.compliance_desc') },
+          { title: t('dashboard.footer.realtime_audit'), desc: t('dashboard.footer.audit_desc') },
         ].map(item => (
           <div key={item.title} className="space-y-2">
             <p className="text-[10px] font-black uppercase tracking-widest text-white">{item.title}</p>
