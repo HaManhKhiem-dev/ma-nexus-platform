@@ -356,6 +356,7 @@ export const resources = {
           "meeting": "Book Meeting",
           "offer": "Submit Offer"
         },
+        
         "ai_deal_intelligence": "AI Deal Intelligence",
         "ai_fallback": "AI summary is unavailable. Showing structured public deal information instead.",
         "alerts": {
@@ -452,7 +453,39 @@ export const resources = {
           "negotiate_spa": "Negotiate SPA",
           "review_loi": "Review LOI",
           "title": "Legal Workflow"
-        }
+        },
+        investor_memo: {
+            description:
+              'This memo compares the deal against your investment profile, target ticket size, risk appetite, and strategic preferences.',
+            eyebrow: 'AI Investor Memo',
+            fit_score: 'Fit Score',
+            good_fit: 'Good Fit',
+            key_risks: 'Key Risks',
+            low_fit: 'Low Fit',
+            moderate_fit: 'Moderate Fit',
+            next_step_data_room:
+              'Request or review Data Room access before making any investment decision.',
+            next_step_financials:
+              'Check audited financial statements, revenue quality, EBITDA adjustments, and customer concentration.',
+            next_step_risks:
+              'Review legal, operational, and valuation risks with advisors before proceeding.',
+            no_major_risks: 'No major mismatch was detected from the available public data.',
+            no_reasons: 'No strong matching signal was identified from the current profile.',
+            strong_fit: 'Strong Fit',
+            suggested_next_steps: 'Suggested Next Steps',
+            title: 'Personalized Deal Analysis',
+            why_fit: 'Why This Fits',
+
+            ai_commentary: 'AI Generated Commentary',
+            ai_commentary_title: 'Investor-Oriented Memo',
+            ai_commentary_loading: 'Generating investor commentary...',
+            ai_commentary_unavailable:
+              'AI commentary is unavailable. Use the rule-based analysis above.',
+            ai_highlights: 'Investment Highlights',
+            ai_risks: 'Risks To Review',
+            ai_questions: 'Due Diligence Questions',
+            ai_next_action: 'Suggested Next Action',
+},
       },
       "home": {
         "compliance_layer": "Compliance Layer",
@@ -509,6 +542,8 @@ export const resources = {
       },
       "marketplace": {
         "ai_recommendations": "AI Recommendations",
+        "ai_filter_active": "Showing {{count}} AI-matched opportunities",
+        "ai_available": "{{count}} top matches ready",
         "badge": "Private Deal Network",
         "description": "Browse verified private-market opportunities with KYC-gated visibility, AI compatibility scores, and secure workflow controls.",
         "ebitda_value": "EBITDA {{value}}",
@@ -517,6 +552,12 @@ export const resources = {
           "deal_size": "Deal Size",
           "geography": "Geography",
           "industry": "Industry"
+        },
+        "fit": {
+          "strong": "Strong Fit",
+          "good": "Good Fit",
+          "moderate": "Moderate Fit",
+          "low": "Low Fit"
         },
         "high_affinity": "High Affinity",
         "indicative_value": "Indicative Value",
@@ -1157,7 +1198,39 @@ export const resources = {
           "negotiate_spa": "Đàm phán SPA",
           "review_loi": "Rà soát LOI",
           "title": "Quy trình pháp lý"
-        }
+        },
+        investor_memo: {
+          description:
+            'Bản ghi nhớ này so sánh thương vụ với khẩu vị đầu tư, quy mô vốn mục tiêu, mức chịu rủi ro và ưu tiên chiến lược của bạn.',
+          eyebrow: 'AI Investor Memo',
+          fit_score: 'Điểm phù hợp',
+          good_fit: 'Phù hợp cao',
+          key_risks: 'Rủi ro cần lưu ý',
+          low_fit: 'Phù hợp thấp',
+          moderate_fit: 'Phù hợp trung bình',
+          next_step_data_room:
+            'Yêu cầu hoặc kiểm tra quyền truy cập Data Room trước khi ra quyết định đầu tư.',
+          next_step_financials:
+            'Kiểm tra báo cáo tài chính đã kiểm toán, chất lượng doanh thu, điều chỉnh EBITDA và mức độ tập trung khách hàng.',
+          next_step_risks:
+            'Rà soát rủi ro pháp lý, vận hành và định giá cùng cố vấn trước khi tiếp tục.',
+          no_major_risks: 'Chưa phát hiện điểm lệch lớn từ dữ liệu công khai hiện có.',
+          no_reasons: 'Chưa phát hiện tín hiệu phù hợp mạnh từ hồ sơ hiện tại.',
+          strong_fit: 'Rất phù hợp',
+          suggested_next_steps: 'Bước tiếp theo nên làm',
+          title: 'Phân tích cá nhân hóa cho nhà đầu tư',
+          why_fit: 'Vì sao phù hợp',
+
+          ai_commentary: 'Nhận xét AI',
+          ai_commentary_title: 'Bản ghi nhớ dành cho nhà đầu tư',
+          ai_commentary_loading: 'Đang tạo nhận xét cho nhà đầu tư...',
+          ai_commentary_unavailable:
+            'Chưa có nhận xét AI. Hãy dùng phần phân tích theo quy tắc phía trên.',
+          ai_highlights: 'Điểm hấp dẫn đầu tư',
+          ai_risks: 'Rủi ro cần rà soát',
+          ai_questions: 'Câu hỏi thẩm định',
+          ai_next_action: 'Hành động tiếp theo đề xuất',
+},
       },
       "home": {
         "compliance_layer": "Lớp tuân thủ",
@@ -1214,6 +1287,8 @@ export const resources = {
       },
       "marketplace": {
         "ai_recommendations": "Gợi ý AI",
+        "ai_filter_active": "Đang hiển thị {{count}} cơ hội phù hợp với AI",
+        "ai_available": "{{count}} gợi ý phù hợp nhất",
         "badge": "Mạng lưới thương vụ riêng tư",
         "description": "Duyệt các cơ hội thị trường tư nhân đã xác minh với khả năng hiển thị qua KYC, điểm tương thích AI và kiểm soát quy trình bảo mật.",
         "ebitda_value": "EBITDA {{value}}",
@@ -1222,6 +1297,12 @@ export const resources = {
           "deal_size": "Quy mô thương vụ",
           "geography": "Khu vực",
           "industry": "Ngành"
+        },
+        "fit": {
+          "strong": "Rất phù hợp",
+          "good": "Phù hợp cao",
+          "moderate": "Phù hợp trung bình",
+          "low": "Phù hợp thấp"
         },
         "high_affinity": "Phù hợp cao",
         "indicative_value": "Giá trị tham chiếu",

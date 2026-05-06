@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -30,7 +30,7 @@ import {
 
 import { useDeal } from '../hooks/useFirebase';
 import { formatCurrency } from '../lib/utils';
-import { getDealSummary } from '../lib/gemini';
+import { getDealSummary, explainDealForInvestor } from '../lib/gemini';
 import { useAuth } from '../components/AuthContext';
 import {
   collection,
@@ -53,9 +53,10 @@ import {
 } from '../lib/compliance';
 import { writeAuditLog } from '../lib/audit';
 import { useTranslation } from 'react-i18next';
+import { scoreDealForInvestor } from '../lib/recommendation';
 
 export default function DealDetail() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { id } = useParams();
   const navigate = useNavigate();
 
@@ -66,25 +67,118 @@ export default function DealDetail() {
   const { user, profile } = useAuth();
 
   const [aiSummary, setAiSummary] = useState<string | null>(null);
+  const [investorMemo, setInvestorMemo] = useState<any | null>(null);
+  const [investorMemoLoading, setInvestorMemoLoading] = useState(false);
   const [ndaStatus, setNdaStatus] = useState<string | null>(
     fallbackDeal ? 'requested' : null
   );
   const [showNdaModal, setShowNdaModal] = useState(false);
   const [signatureName, setSignatureName] = useState('');
   const [isSigning, setIsSigning] = useState(false);
-const dealStatusLabel = (status?: string) =>
-  t(`statuses.deals.${normalizeDealStatus(status)}`, {
-    defaultValue: statusLabel(status),
-  });
+
+  const dealStatusLabel = (status?: string) =>
+    t(`statuses.deals.${normalizeDealStatus(status)}`, {
+      defaultValue: statusLabel(status),
+    });
+
+  const investorAnalysis = useMemo(() => {
+    const result = scoreDealForInvestor(deal, profile?.investorPreference);
+
+    return {
+      score: result.score,
+      reasons: result.reasons,
+      risks: result.risks,
+      label:
+        result.score >= 85
+          ? t('deal_detail.investor_memo.strong_fit')
+          : result.score >= 70
+          ? t('deal_detail.investor_memo.good_fit')
+          : result.score >= 55
+          ? t('deal_detail.investor_memo.moderate_fit')
+          : t('deal_detail.investor_memo.low_fit'),
+    };
+  }, [deal, profile?.investorPreference, t]);
+
   useEffect(() => {
-    if (deal && !aiSummary) {
-      getDealSummary(deal).then(setAiSummary).catch(() => {
-        setAiSummary(
-          t('deal_detail.ai_fallback')
-        );
-      });
+  if (!deal) return;
+
+  let cancelled = false;
+  const lang = i18n.language === 'vi' ? 'vi' : 'en';
+  const cacheKey = `ai-summary:${deal.id}:${lang}`;
+
+  const cached = window.localStorage.getItem(cacheKey);
+  if (cached) {
+    setAiSummary(cached);
+    return;
+  }
+
+  setAiSummary(null);
+
+  getDealSummary(deal, lang)
+    .then((summary) => {
+      if (!cancelled) {
+        const finalSummary = summary || t('deal_detail.ai_fallback');
+        setAiSummary(finalSummary);
+        window.localStorage.setItem(cacheKey, finalSummary);
+      }
+    })
+    .catch(() => {
+      if (!cancelled) {
+        setAiSummary(t('deal_detail.ai_fallback'));
+      }
+    });
+
+  return () => {
+    cancelled = true;
+  };
+}, [deal?.id, i18n.language, t]);
+
+useEffect(() => {
+  if (!deal || !profile?.investorPreference || !investorAnalysis) return;
+
+  let cancelled = false;
+  const lang = i18n.language === 'vi' ? 'vi' : 'en';
+  const cacheKey = `investor-memo:${deal.id}:${lang}:${investorAnalysis.score}`;
+
+  const cached = window.localStorage.getItem(cacheKey);
+  if (cached) {
+    try {
+      setInvestorMemo(JSON.parse(cached));
+      return;
+    } catch {
+      window.localStorage.removeItem(cacheKey);
     }
-  }, [deal, aiSummary]);
+  }
+
+  const generateInvestorMemo = async () => {
+    setInvestorMemoLoading(true);
+    setInvestorMemo(null);
+
+    try {
+      const memo = await explainDealForInvestor(
+        deal,
+        profile.investorPreference,
+        investorAnalysis,
+        lang
+      );
+
+      if (!cancelled) {
+        setInvestorMemo(memo);
+        window.localStorage.setItem(cacheKey, JSON.stringify(memo));
+      }
+    } finally {
+      if (!cancelled) {
+        setInvestorMemoLoading(false);
+      }
+    }
+  };
+
+  generateInvestorMemo();
+
+  return () => {
+    cancelled = true;
+  };
+}, [deal?.id, profile?.investorPreference, investorAnalysis.score, i18n.language]);
 
   useEffect(() => {
     if (!user || !id || fallbackDeal) return;
@@ -304,8 +398,7 @@ const dealStatusLabel = (status?: string) =>
   const isSellerOwner = user?.uid === deal.sellerUid;
   const isAuthorized = canViewPrivateDeal(profile, ndaStatus, isSellerOwner, deal.status);
   const latestRevenue = Number(deal.revenue?.[2] || 0);
-  const verifiedKyc = isKycVerified(profile);
-
+  const verifiedKyc = isKycVerified(profile); 
   const metrics = [
     {
       label: t('deal_detail.metrics.valuation'),
@@ -364,6 +457,7 @@ const dealStatusLabel = (status?: string) =>
         <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-10 items-end">
           <div className="lg:col-span-8 space-y-7">
             <div className="flex flex-wrap items-center gap-3">
+              
               <StatusPill label={deal.industry} icon={<Building2 size={12} />} />
               <StatusPill label={deal.location} icon={<MapPin size={12} />} />
               <StatusPill
@@ -415,7 +509,14 @@ const dealStatusLabel = (status?: string) =>
               <ScoreCard key={item.label} {...item} />
             ))}
           </section>
-
+              <InvestorMemoCard
+            score={investorAnalysis.score}
+            label={investorAnalysis.label}
+            reasons={investorAnalysis.reasons}
+            risks={investorAnalysis.risks}
+            aiMemo={investorMemo}
+            aiMemoLoading={investorMemoLoading}
+          />
           <section className="rounded-[34px] border border-slate-800 bg-[#0f172a]/70 p-6 md:p-8 shadow-2xl shadow-black/20">
             <div className="flex items-center gap-3 mb-5">
               <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
@@ -519,6 +620,238 @@ const dealStatusLabel = (status?: string) =>
   );
 }
 
+
+function InvestorMemoCard({
+  score,
+  label,
+  reasons,
+  risks,
+  aiMemo,
+  aiMemoLoading,
+}: {
+  score: number;
+  label: string;
+  reasons: string[];
+  risks: string[];
+  aiMemo?: any | null;
+  aiMemoLoading?: boolean;
+}) {
+  const { t, i18n } = useTranslation();
+  const normalizedScore = Math.min(Math.max(score, 0), 100);
+
+  const nextSteps = [
+    t('deal_detail.investor_memo.next_step_data_room'),
+    t('deal_detail.investor_memo.next_step_financials'),
+    t('deal_detail.investor_memo.next_step_risks'),
+  ];
+
+  return (
+    <section className="relative overflow-hidden rounded-[34px] border border-emerald-500/20 bg-emerald-500/[0.04] p-6 md:p-8 shadow-2xl shadow-black/20">
+      <div className="absolute -top-32 -right-24 w-80 h-80 rounded-full bg-emerald-500/10 blur-[100px]" />
+
+      <div className="relative z-10">
+        <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6 mb-8">
+          <div className="flex items-start gap-4">
+            <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0">
+              <Sparkles size={24} className="text-emerald-400" />
+            </div>
+
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.3em] text-emerald-400 font-black">
+                {t('deal_detail.investor_memo.eyebrow')}
+              </p>
+
+              <h2 className="text-2xl md:text-3xl font-black text-white mt-2">
+                {t('deal_detail.investor_memo.title')}
+              </h2>
+
+              <p className="text-sm text-slate-400 leading-7 mt-3 max-w-2xl">
+                {t('deal_detail.investor_memo.description')}
+              </p>
+            </div>
+          </div>
+
+          <div className="rounded-[28px] border border-emerald-500/20 bg-[#020617]/70 px-6 py-5 min-w-[180px]">
+            <p className="text-[9px] uppercase tracking-widest text-slate-500 font-black">
+              {t('deal_detail.investor_memo.fit_score')}
+            </p>
+
+            <div className="flex items-end gap-2 mt-2">
+              <p className="text-5xl font-black text-white">
+                {normalizedScore}
+              </p>
+              <p className="text-sm text-slate-500 pb-2">%</p>
+            </div>
+
+            <p className="text-[10px] uppercase tracking-widest text-emerald-400 font-black mt-3">
+              {label}
+            </p>
+
+            <div className="mt-4 h-2 rounded-full bg-slate-900 overflow-hidden">
+              <motion.div
+                initial={{ width: 0 }}
+                animate={{ width: `${normalizedScore}%` }}
+                transition={{ duration: 0.7 }}
+                className="h-full rounded-full bg-emerald-500"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <MemoColumn
+            title={t('deal_detail.investor_memo.why_fit')}
+            tone="emerald"
+            items={
+              reasons.length > 0
+                ? reasons.slice(0, 4)
+                : [t('deal_detail.investor_memo.no_reasons')]
+            }
+          />
+
+          <MemoColumn
+            title={t('deal_detail.investor_memo.key_risks')}
+            tone="orange"
+            items={
+              risks.length > 0
+                ? risks.slice(0, 4)
+                : [t('deal_detail.investor_memo.no_major_risks')]
+            }
+          />
+
+          <MemoColumn
+            title={t('deal_detail.investor_memo.suggested_next_steps')}
+            tone="slate"
+            items={nextSteps}
+          />
+        </div>
+        <div className="mt-6 rounded-[26px] border border-slate-800 bg-[#020617]/70 p-5">
+  <div className="flex items-center justify-between gap-4 mb-5">
+    <div>
+      <p className="text-[10px] uppercase tracking-[0.25em] text-emerald-400 font-black">
+        {t('deal_detail.investor_memo.ai_commentary')}
+      </p>
+
+      <h3 className="text-xl font-black text-white mt-1">
+        {t('deal_detail.investor_memo.ai_commentary_title')}
+      </h3>
+    </div>
+
+    {aiMemoLoading && (
+      <Loader2 size={18} className="text-emerald-400 animate-spin" />
+    )}
+  </div>
+
+  {aiMemoLoading ? (
+    <p className="text-sm text-slate-500 leading-7">
+      {t('deal_detail.investor_memo.ai_commentary_loading')}
+    </p>
+  ) : aiMemo ? (
+    <div className="space-y-5">
+      <p className="text-sm text-slate-300 leading-7">
+        {aiMemo.summary}
+      </p>
+
+      <MemoTextList
+        title={t('deal_detail.investor_memo.ai_highlights')}
+        items={aiMemo.highlights || []}
+      />
+
+      <MemoTextList
+        title={t('deal_detail.investor_memo.ai_risks')}
+        items={aiMemo.risks || []}
+      />
+
+      <MemoTextList
+        title={t('deal_detail.investor_memo.ai_questions')}
+        items={aiMemo.dueDiligenceQuestions || []}
+      />
+
+      {aiMemo.nextAction && (
+        <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3">
+          <p className="text-[10px] uppercase tracking-widest text-emerald-400 font-black mb-2">
+            {t('deal_detail.investor_memo.ai_next_action')}
+          </p>
+          <p className="text-xs text-emerald-100/80 leading-6">
+            {aiMemo.nextAction}
+          </p>
+        </div>
+      )}
+    </div>
+  ) : (
+    <p className="text-sm text-slate-500 leading-7">
+      {t('deal_detail.investor_memo.ai_commentary_unavailable')}
+    </p>
+  )}
+</div>
+      </div>
+    </section>
+  );
+}
+
+function MemoColumn({
+  title,
+  items,
+  tone,
+}: {
+  title: string;
+  items: string[];
+  tone: 'emerald' | 'orange' | 'slate';
+}) {
+  const toneClass =
+    tone === 'emerald'
+      ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
+      : tone === 'orange'
+      ? 'border-orange-500/20 bg-orange-500/10 text-orange-300'
+      : 'border-slate-800 bg-[#020617] text-slate-300';
+
+  return (
+    <div className="rounded-[26px] border border-slate-800 bg-[#020617]/70 p-5">
+      <p className="text-[10px] uppercase tracking-[0.25em] text-slate-500 font-black mb-4">
+        {title}
+      </p>
+
+      <div className="space-y-3">
+        {items.map((item) => (
+          <div
+            key={item}
+            className={`rounded-2xl border px-4 py-3 text-xs leading-6 ${toneClass}`}
+          >
+            {item}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+function MemoTextList({
+  title,
+  items,
+}: {
+  title: string;
+  items: string[];
+}) {
+  if (!items || items.length === 0) return null;
+
+  return (
+    <div>
+      <p className="text-[10px] uppercase tracking-widest text-slate-500 font-black mb-3">
+        {title}
+      </p>
+
+      <div className="space-y-2">
+        {items.map((item) => (
+          <div
+            key={item}
+            className="rounded-2xl border border-slate-800 bg-slate-950 px-4 py-3 text-xs text-slate-300 leading-6"
+          >
+            {item}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 function StatusPill({
   label,
   icon,
@@ -554,7 +887,7 @@ function AccessStatusCard({
   ndaStatus: string | null;
   verifiedKyc: boolean;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
 
   return (
     <div
@@ -773,7 +1106,7 @@ function DealActionPanel({
   onNavigate: (path: string) => void;
   canRequest: boolean;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
 
   const actions = [
     { label: t('deal_detail.actions.bookmark'), icon: Bookmark, action: 'bookmark' },
@@ -872,7 +1205,7 @@ function DealActionPanel({
 }
 
 function SellerPanel() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
 
   return (
     <section className="rounded-[34px] border border-slate-800 bg-[#0f172a]/70 p-6 shadow-2xl shadow-black/20">
@@ -903,7 +1236,7 @@ function SellerPanel() {
 }
 
 function LegalWorkflowPanel() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
 
   const workflow = [
     t('deal_detail.workflow.generate_nda'),
@@ -949,7 +1282,7 @@ function NdaModal({
   onClose: () => void;
   onSign: () => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
 
   return (
     <motion.div
@@ -1084,7 +1417,7 @@ function NdaClause({
   title: string;
   text: string;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
 
   return (
     <div className="rounded-[22px] border border-slate-800 bg-[#020617] p-5">

@@ -169,14 +169,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       const userDoc = doc(db, 'users', newUser.uid);
       const newProfile = {
-        uid: newUser.uid,
-        name: name || 'User',
-        email: email,
-        role: role,
-        country: 'Vietnam',
-        kycStatus: 'not_started',
-        createdAt: new Date().toISOString(),
-      };
+            uid: newUser.uid,
+            name: name || 'User',
+            email: email,
+            role: role,
+            country: 'Vietnam',
+            kycStatus: 'not_started',
+            investorPreference: buildDefaultInvestorPreference(),
+            createdAt: new Date().toISOString(),
+          };
 
       await setDoc(userDoc, newProfile);
       setProfile(newProfile);
@@ -211,7 +212,19 @@ export function useAuth() {
   if (context === undefined) throw new Error('useAuth must be used within an AuthProvider');
   return context;
 }
-
+function buildDefaultInvestorPreference() {
+  return {
+    preferredIndustries: ['Technology', 'Healthcare'],
+    preferredGeographies: ['Vietnam', 'Singapore'],
+    minTicket: 5000000,
+    maxTicket: 30000000,
+    preferredDealTypes: ['fundraising', 'sell_equity'],
+    riskTolerance: 'medium',
+    controlPreference: 'minority',
+    minGrowthRate: 15,
+    preferredEbitdaPositive: true,
+  };
+}
 // ... (Các hàm helper bên dưới giữ nguyên)
 function buildDefaultProfile(user: User) {
   return {
@@ -221,16 +234,37 @@ function buildDefaultProfile(user: User) {
     role: 'buyer',
     country: 'Vietnam',
     kycStatus: 'not_started',
+    investorPreference: buildDefaultInvestorPreference(),
     createdAt: new Date().toISOString(),
   };
 }
 
 function applyLocalProfilePatch(uid: string, profile: any) {
+  const profileWithDefaults = {
+    ...profile,
+    investorPreference: {
+      ...buildDefaultInvestorPreference(),
+      ...(profile?.investorPreference || {}),
+    },
+  };
+
   try {
     const stored = window.localStorage.getItem(`ma-nexus-profile-${uid}`);
-    return stored ? { ...profile, ...JSON.parse(stored) } : profile;
+    if (!stored) return profileWithDefaults;
+
+    const storedProfile = JSON.parse(stored);
+
+    return {
+      ...profileWithDefaults,
+      ...storedProfile,
+      investorPreference: {
+        ...buildDefaultInvestorPreference(),
+        ...(profileWithDefaults.investorPreference || {}),
+        ...(storedProfile.investorPreference || {}),
+      },
+    };
   } catch {
-    return profile;
+    return profileWithDefaults;
   }
 }
 

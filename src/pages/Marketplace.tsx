@@ -2,11 +2,14 @@ import React, { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useDeals } from '../hooks/useFirebase';
 import { formatCurrency } from '../lib/utils';
+import { scoreDealForInvestor } from '../lib/recommendation';
+import { useAuth } from '../components/AuthContext';
 import { sampleDeals } from '../lib/mockData';
 import { Search, Filter, MapPin, ChevronRight, ShieldCheck, Sparkles, TrendingUp, ArrowUpRight, ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { statusLabel, normalizeDealStatus } from '../lib/compliance';
 import { useTranslation } from 'react-i18next';
+
 
 const optionKey = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
 
@@ -15,12 +18,16 @@ const geographies = ['All', 'Vietnam', 'Singapore', 'Thailand', 'Indonesia', 'Un
 const sizes = ['All', '< $10M', '$10M - $25M', '$25M+'];
 
 export default function Marketplace() {
+  
   const { t } = useTranslation();
   const { deals, loading } = useDeals('published');
+  const { profile } = useAuth();
+
   const [keyword, setKeyword] = useState('');
   const [industry, setIndustry] = useState('All');
   const [geography, setGeography] = useState('All');
   const [dealSize, setDealSize] = useState('All');
+  const [showAiOnly, setShowAiOnly] = useState(false);
 
   const sourceDeals = deals.length > 0 ? deals : sampleDeals;
   const dealStatusLabel = (status?: string) => t(`statuses.deals.${normalizeDealStatus(status)}`, { defaultValue: statusLabel(status) });
@@ -39,7 +46,27 @@ export default function Marketplace() {
       return matchesKeyword && matchesIndustry && matchesGeography && matchesSize;
     });
   }, [sourceDeals, keyword, industry, geography, dealSize]);
+  const scoredDeals = useMemo(() => {
+  return filteredDeals.map((deal) => {
+    const result = scoreDealForInvestor(deal, profile?.investorPreference);
 
+    return {
+      ...deal,
+      aiScore: result.score,
+      aiReasons: result.reasons,
+      aiRisks: result.risks,
+    };
+  });
+}, [filteredDeals, profile?.investorPreference]);
+
+const AI_RECOMMENDATION_THRESHOLD = 75;
+
+const recommendedDeals = useMemo(() => {
+  return scoredDeals
+    .filter((deal) => Number(deal.aiScore || 0) >= AI_RECOMMENDATION_THRESHOLD)
+    .sort((a, b) => Number(b.aiScore || 0) - Number(a.aiScore || 0));
+}, [scoredDeals]);
+const displayedDeals = showAiOnly ? recommendedDeals : scoredDeals;
   if (loading && deals.length === 0) {
     return (
       <div className="space-y-12 animate-pulse p-8">
@@ -138,15 +165,36 @@ export default function Marketplace() {
           </div>
         ))}
         
-        <div className="bg-emerald-500/5 border border-emerald-500/20 p-5 rounded-2xl flex items-center gap-4 group hover:bg-emerald-500/10 transition-all">
-          <div className="p-3 bg-emerald-500/20 rounded-xl text-emerald-400 group-hover:scale-110 transition-transform">
-            <Sparkles size={20} />
-          </div>
-          <div>
-            <p className="text-[10px] uppercase tracking-widest text-emerald-500 font-black">{t('marketplace.ai_recommendations')}</p>
-            <p className="text-xs text-white/70 font-medium">{t('marketplace.opportunities_found', { count: 8 })}</p>
-          </div>
-        </div>
+        <button
+  type="button"
+  onClick={() => setShowAiOnly((prev) => !prev)}
+  className={`bg-emerald-500/5 border p-5 rounded-2xl flex items-center gap-4 group transition-all text-left ${
+    showAiOnly
+      ? 'border-emerald-500/50 bg-emerald-500/10 shadow-lg shadow-emerald-500/10'
+      : 'border-emerald-500/20 hover:bg-emerald-500/10'
+  }`}
+>
+  <div className="p-3 bg-emerald-500/20 rounded-xl text-emerald-400 group-hover:scale-110 transition-transform">
+    <Sparkles size={20} />
+  </div>
+
+  <div>
+    <p className="text-[10px] uppercase tracking-widest text-emerald-500 font-black">
+      {t('marketplace.ai_recommendations')}
+    </p>
+
+    <p className="text-xs text-white/70 font-medium">
+      {showAiOnly
+        ? t('marketplace.ai_filter_active', {
+            count: recommendedDeals.length,
+            defaultValue: `Showing ${recommendedDeals.length} AI-matched opportunities`,
+          })
+        : t('marketplace.opportunities_found', {
+            count: recommendedDeals.length,
+          })}
+    </p>
+  </div>
+</button>
       </section>
 
       {/* Deals List */}
@@ -161,12 +209,12 @@ export default function Marketplace() {
         </div>
 
         <AnimatePresence mode="popLayout">
-          {filteredDeals.length === 0 ? (
+          {displayedDeals.length === 0 ? (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-20 text-center bg-slate-900/10 border border-slate-800/50 rounded-3xl text-slate-500 font-light italic">
               {t('marketplace.empty')}
             </motion.div>
           ) : (
-            filteredDeals.map((deal, idx) => (
+            displayedDeals.map((deal, idx) => (
               <motion.div
                 key={deal.id}
                 layout
@@ -195,6 +243,18 @@ export default function Marketplace() {
                         </h3>
                         <div className="flex items-center gap-2 mt-2 text-slate-500 font-medium text-xs">
                           <MapPin size={12} className="text-emerald-500" /> {deal.location}
+                          {deal.aiReasons?.length > 0 && (
+                          <div className="flex flex-wrap gap-2 mt-4">
+                            {deal.aiReasons.slice(0, 2).map((reason: string) => (
+                              <span
+                                key={reason}
+                                className="px-2.5 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-[9px] text-emerald-300 font-bold"
+                              >
+                                {reason}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                         </div>
                       </div>
                     </div>
@@ -230,16 +290,24 @@ export default function Marketplace() {
                             cx="32" cy="32" r="28" fill="none" stroke="currentColor" strokeWidth="4" 
                             strokeDasharray={176} 
                             initial={{ strokeDashoffset: 176 }}
-                            animate={{ strokeDashoffset: 176 - (176 * (deal.matchScore || 78)) / 100 }}
+                            animate={{ strokeDashoffset: 176 - (176 * (deal.aiScore ?? deal.matchScore ?? 78)) / 100 }}
                             transition={{ duration: 1.5, ease: "easeOut" }}
                             className="text-emerald-500" 
                           />
                         </svg>
-                        <span className="absolute text-xs font-mono font-black text-white">{deal.matchScore || 78}%</span>
+                        <span className="absolute text-xs font-mono font-black text-white">{deal.aiScore ?? deal.matchScore ?? 78}%</span>
                       </div>
                       <div className="flex items-center gap-1.5 text-emerald-500">
                          <TrendingUp size={12} />
-                         <span className="text-[9px] font-black uppercase tracking-tighter">{t('marketplace.high_affinity')}</span>
+                         <span className="text-[9px] font-black uppercase tracking-tighter">
+                                {Number(deal.aiScore || 0) >= 85
+                                  ? t('marketplace.fit.strong', { defaultValue: 'Strong Fit' })
+                                  : Number(deal.aiScore || 0) >= 70
+                                  ? t('marketplace.fit.good', { defaultValue: 'Good Fit' })
+                                  : Number(deal.aiScore || 0) >= 55
+                                  ? t('marketplace.fit.moderate', { defaultValue: 'Moderate Fit' })
+                                  : t('marketplace.fit.low', { defaultValue: 'Low Fit' })}
+                              </span>
                       </div>
                     </div>
 
