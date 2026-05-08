@@ -125,6 +125,32 @@ const LanguageSwitcher = () => {
   );
 };
 
+function NavAvatar({
+  profile,
+  size = 'md'
+}: {
+  profile: any;
+  size?: 'sm' | 'md';
+}) {
+  const sizeClass = size === 'sm' ? 'w-8 h-8' : 'w-9 h-9';
+
+  return (
+    <div
+      className={`${sizeClass} rounded-full bg-emerald-500 flex items-center justify-center overflow-hidden uppercase font-black text-[#020617] text-xs shrink-0`}
+    >
+      {profile?.avatarUrl ? (
+        <img
+          src={profile.avatarUrl}
+          alt={profile?.name || 'User avatar'}
+          className="w-full h-full object-cover"
+        />
+      ) : (
+        profile?.name?.charAt(0) || 'U'
+      )}
+    </div>
+  );
+}
+
 // AUTH MODAL
 const AuthModal = ({
   isOpen,
@@ -886,9 +912,7 @@ function AppLayout({ children }: { children: React.ReactNode }) {
                   to="/profile"
                   className="flex min-w-0 max-w-[210px] 2xl:max-w-[280px] items-center gap-3 bg-slate-900/70 p-1.5 pr-4 rounded-full border border-slate-800 hover:border-emerald-500/50 transition-all"
                 >
-                  <div className="w-9 h-9 rounded-full bg-emerald-500 flex items-center justify-center overflow-hidden uppercase font-black text-[#020617] text-xs">
-                    {profile?.name?.charAt(0) || 'U'}
-                  </div>
+                  <NavAvatar profile={profile} />
 
                   <div className="hidden xl:block min-w-0 text-left">
                     <p className="max-w-[135px] 2xl:max-w-[205px] truncate text-[9px] font-black uppercase tracking-widest leading-none text-white">
@@ -951,8 +975,15 @@ function AppLayout({ children }: { children: React.ReactNode }) {
                   className="flex items-center justify-between rounded-2xl border border-slate-800 bg-slate-900/60 px-4 py-4 text-slate-300"
                 >
                   <span className="flex items-center gap-3 text-[10px] uppercase tracking-widest font-black">
-                    <User size={15} />
-                    {t('navbar.profile_kyc')}
+                    <NavAvatar profile={profile} size="sm" />
+                    <span className="flex flex-col items-start gap-1">
+                      <span>{t('navbar.profile_kyc')}</span>
+                      {user && (
+                        <span className="text-[8px] text-emerald-500">
+                          {getRoleLabel(profile?.role, t)}
+                        </span>
+                      )}
+                    </span>
                   </span>
                   <ChevronRight size={16} />
                 </Link>
