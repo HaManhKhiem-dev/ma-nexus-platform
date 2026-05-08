@@ -131,8 +131,10 @@ export default function Profile() {
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const avatarInputRef = useRef<HTMLInputElement | null>(null);
 
   const [updating, setUpdating] = useState(false);
+  const [avatarUploading, setAvatarUploading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -244,6 +246,49 @@ export default function Profile() {
       }
     } finally {
       setUpdating(false);
+    }
+  };
+
+
+  const uploadAvatar = async (file: File | null) => {
+    if (!user || !file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setError(t('profile.errors.invalid_image_file'));
+      return;
+    }
+
+    setAvatarUploading(true);
+    setMessage(null);
+    setError(null);
+
+    try {
+      const avatarUrl = await compressImage(file);
+
+      await setDoc(
+        doc(db, 'users', user.uid),
+        {
+          avatarUrl,
+          updatedAt: new Date().toISOString()
+        },
+        { merge: true }
+      );
+
+      setMessage(t('profile.messages.avatar_updated'));
+    } catch (avatarError: any) {
+      console.error('Avatar upload failed:', avatarError);
+
+      setError(
+        avatarError instanceof Error
+          ? avatarError.message
+          : t('profile.errors.avatar_upload_failed')
+      );
+    } finally {
+      setAvatarUploading(false);
+
+      if (avatarInputRef.current) {
+        avatarInputRef.current.value = '';
+      }
     }
   };
 
@@ -464,6 +509,14 @@ export default function Profile() {
           <section className="rounded-[32px] border border-slate-800 bg-[#0f172a]/70 p-6 shadow-2xl shadow-black/20">
             <div className="flex flex-col items-center text-center">
               <div className="relative group w-32 h-32">
+                <input
+                  ref={avatarInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(event) => uploadAvatar(event.target.files?.[0] || null)}
+                />
+
                 {profile.avatarUrl ? (
                   <img
                     src={profile.avatarUrl}
@@ -476,9 +529,18 @@ export default function Profile() {
                   </div>
                 )}
 
-                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity rounded-[32px] flex items-center justify-center cursor-pointer">
-                  <Camera size={24} className="text-white" />
-                </div>
+                <button
+                  type="button"
+                  onClick={() => avatarInputRef.current?.click()}
+                  disabled={avatarUploading}
+                  className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity rounded-[32px] flex items-center justify-center cursor-pointer disabled:cursor-not-allowed"
+                >
+                  {avatarUploading ? (
+                    <Loader2 size={24} className="text-white animate-spin" />
+                  ) : (
+                    <Camera size={24} className="text-white" />
+                  )}
+                </button>
               </div>
 
               <h2 className="text-2xl font-black text-white mt-6">
