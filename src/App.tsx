@@ -43,7 +43,7 @@ import Profile from './pages/Profile';
 import DataRoom from './pages/DataRoom';
 import AdminDashboard from './pages/AdminDashboard';
 
-type AuthMode = 'login' | 'register' | 'otp';
+type AuthMode = 'login' | 'register' | 'otp' | 'forgot_password';
 
 type NavItem = {
   name: string;
@@ -143,7 +143,8 @@ const AuthModal = ({
     signingIn,
     authError,
     user,
-    clearAuthError
+    clearAuthError,
+    sendPasswordReset
   } = useAuth();
 
   const [authMode, setAuthMode] = useState<AuthMode>('login');
@@ -152,6 +153,7 @@ const AuthModal = ({
   const [name, setName] = useState('');
   const [role, setRole] = useState('buyer');
   const [otpInput, setOtpInput] = useState('');
+  const [resetSent, setResetSent] = useState(false);
 
   const roleItems = useMemo(
     () => [
@@ -192,14 +194,28 @@ const AuthModal = ({
       if (isValid) {
         await signUpWithEmail(email, password, name, role);
       }
+      return;
+    }
+
+    if (authMode === 'forgot_password') {
+      const success = await sendPasswordReset(email);
+      if (success) {
+        setResetSent(true);
+      }
     }
   };
 
   const handleBackOrSwitch = () => {
     resetAuthError();
+    setResetSent(false);
 
     if (authMode === 'otp') {
       setAuthMode('register');
+      return;
+    }
+
+    if (authMode === 'forgot_password') {
+      setAuthMode('login');
       return;
     }
 
@@ -229,7 +245,7 @@ const AuthModal = ({
         <div className="relative z-10 p-8 md:p-10">
           <div className="flex flex-col items-center text-center">
             <div className="w-20 h-20 bg-emerald-500/10 rounded-[28px] flex items-center justify-center mb-6 border border-emerald-500/20 shadow-lg shadow-emerald-500/10">
-              {authMode === 'otp' ? (
+              {authMode === 'otp' || authMode === 'forgot_password' ? (
                 <Mail size={36} className="text-emerald-400" />
               ) : (
                 <Fingerprint size={36} className="text-emerald-400" />
@@ -244,14 +260,18 @@ const AuthModal = ({
               {authMode === 'login'
                 ? t('auth.title_login')
                 : authMode === 'register'
-                ? t('auth.title_register')
-                : t('auth.title_otp')}
+                  ? t('auth.title_register')
+                  : authMode === 'otp'
+                    ? t('auth.title_otp')
+                    : t('auth.title_forgot_password')}
             </h2>
 
             <p className="text-xs text-slate-500 mt-3 mb-8 leading-6 max-w-sm">
               {authMode === 'otp'
                 ? t('auth.otp_description', { email })
-                : t('auth.secure_description')}
+                : authMode === 'forgot_password'
+                  ? t('auth.forgot_password_description')
+                  : t('auth.secure_description')}
             </p>
           </div>
 
@@ -264,11 +284,10 @@ const AuthModal = ({
                       key={item.id}
                       type="button"
                       onClick={() => setRole(item.id)}
-                      className={`flex flex-col items-center gap-2 py-3 rounded-2xl border transition-all ${
-                        role === item.id
-                          ? 'border-emerald-500/60 bg-emerald-500/10 text-emerald-400 shadow-lg shadow-emerald-500/10'
-                          : 'border-slate-800 bg-slate-900/50 text-slate-500 hover:border-slate-700'
-                      }`}
+                      className={`flex flex-col items-center gap-2 py-3 rounded-2xl border transition-all ${role === item.id
+                        ? 'border-emerald-500/60 bg-emerald-500/10 text-emerald-400 shadow-lg shadow-emerald-500/10'
+                        : 'border-slate-800 bg-slate-900/50 text-slate-500 hover:border-slate-700'
+                        }`}
                     >
                       {item.icon}
                       <span className="text-[8px] font-black uppercase tracking-widest">
@@ -291,17 +310,19 @@ const AuthModal = ({
             )}
 
             {authMode !== 'otp' && (
-              <>
-                <FieldLabel label={t('auth.corporate_email')}>
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                    className="input-dark"
-                  />
-                </FieldLabel>
+              <FieldLabel label={t('auth.corporate_email')}>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  className="input-dark"
+                />
+              </FieldLabel>
+            )}
 
+            {authMode !== 'otp' && authMode !== 'forgot_password' && (
+              <div className="space-y-1">
                 <FieldLabel label={t('auth.access_key')}>
                   <input
                     type="password"
@@ -311,7 +332,22 @@ const AuthModal = ({
                     className="input-dark"
                   />
                 </FieldLabel>
-              </>
+                {authMode === 'login' && (
+                  <div className="flex justify-end px-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        resetAuthError();
+                        setResetSent(false);
+                        setAuthMode('forgot_password');
+                      }}
+                      className="text-[10px] uppercase font-black tracking-widest text-slate-500 hover:text-emerald-500 transition-colors"
+                    >
+                      {t('auth.forgot_password')}
+                    </button>
+                  </div>
+                )}
+              </div>
             )}
 
             {authMode === 'otp' && (
@@ -331,9 +367,17 @@ const AuthModal = ({
               </div>
             )}
 
+            {resetSent && (
+              <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3">
+                <p className="text-[10px] text-emerald-400 text-center font-black uppercase tracking-widest leading-5">
+                  {t('auth.reset_success')}
+                </p>
+              </div>
+            )}
+
             {authError && (
               <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3">
-                <p className="text-[10px] text-red-300 text-center font-black uppercase tracking-widest">
+                <p className="text-[10px] text-red-300 text-center font-black uppercase tracking-widest leading-5">
                   {authError}
                 </p>
               </div>
@@ -347,14 +391,16 @@ const AuthModal = ({
               {signingIn
                 ? t('auth.processing')
                 : authMode === 'login'
-                ? t('auth.enter_workspace')
-                : authMode === 'register'
-                ? t('auth.send_verification')
-                : t('auth.confirm_account')}
+                  ? t('auth.enter_workspace')
+                  : authMode === 'register'
+                    ? t('auth.send_verification')
+                    : authMode === 'otp'
+                      ? t('auth.confirm_account')
+                      : t('auth.send_reset_link')}
             </button>
           </form>
 
-          {authMode !== 'otp' && (
+          {authMode !== 'otp' && authMode !== 'forgot_password' && (
             <div className="mt-6">
               <div className="relative flex py-3 items-center">
                 <div className="flex-grow border-t border-slate-800" />
@@ -384,6 +430,11 @@ const AuthModal = ({
               <>
                 <ArrowLeft size={12} />
                 {t('auth.back_to_register')}
+              </>
+            ) : authMode === 'forgot_password' ? (
+              <>
+                <ArrowLeft size={12} />
+                {t('auth.back_to_login')}
               </>
             ) : authMode === 'login' ? (
               t('auth.register_switch')
@@ -445,8 +496,8 @@ const Home = () => {
   const ctaLabel = !user
     ? t('home.cta_initialize_access')
     : verified
-    ? t('home.cta_enter_marketplace')
-    : t('home.cta_complete_kyc');
+      ? t('home.cta_enter_marketplace')
+      : t('home.cta_complete_kyc');
 
   const ctaPath = verified ? '/marketplace' : '/profile';
 
@@ -1057,13 +1108,12 @@ function DesktopNavItem({
     <Link
       to={target}
       title={locked ? t('navbar.kyc_required_title') : item.name}
-      className={`whitespace-nowrap text-[10px] uppercase tracking-[0.2em] font-black transition-all relative py-2 flex items-center gap-2 ${
-        locked
-          ? 'text-slate-600 hover:text-orange-400'
-          : active
+      className={`whitespace-nowrap text-[10px] uppercase tracking-[0.2em] font-black transition-all relative py-2 flex items-center gap-2 ${locked
+        ? 'text-slate-600 hover:text-orange-400'
+        : active
           ? 'text-emerald-400'
           : 'text-slate-500 hover:text-white'
-      }`}
+        }`}
     >
       <Icon size={14} />
       {item.name}
@@ -1094,13 +1144,12 @@ function MobileNavItem({
   return (
     <Link
       to={target}
-      className={`flex items-center justify-between rounded-2xl border px-4 py-4 ${
-        locked
-          ? 'border-orange-500/20 bg-orange-500/10 text-orange-300'
-          : active
+      className={`flex items-center justify-between rounded-2xl border px-4 py-4 ${locked
+        ? 'border-orange-500/20 bg-orange-500/10 text-orange-300'
+        : active
           ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
           : 'border-slate-800 bg-slate-900/60 text-slate-300'
-      }`}
+        }`}
     >
       <span className="flex items-center gap-3 text-[10px] uppercase tracking-widest font-black">
         <Icon size={15} />

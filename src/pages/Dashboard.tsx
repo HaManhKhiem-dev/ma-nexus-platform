@@ -53,7 +53,7 @@ export default function Dashboard() {
       setMyNdas(snap.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
     });
 
-    let unsubModeration = () => {};
+    let unsubModeration = () => { };
     if (canAdminModerate(profile)) {
       unsubModeration = onSnapshot(collection(db, 'deals'), (snap) => {
         setModerationDeals(snap.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
@@ -102,57 +102,57 @@ export default function Dashboard() {
       if (error?.code === 'permission-denied') {
         setNdaError(t('dashboard.errors.firestore_rules_blocking_nda'));
       } else {
-setNdaError(error instanceof Error ? error.message : t('dashboard.errors.nda_update_failed'));
+        setNdaError(error instanceof Error ? error.message : t('dashboard.errors.nda_update_failed'));
       }
     }
   };
 
   const updateDealStatus = async (
-  dealId: string,
-  status: 'under_review' | 'approved' | 'published' | 'closed'
-) => {
-  if (!user || !isAdmin) return;
+    dealId: string,
+    status: 'under_review' | 'approved' | 'published' | 'closed'
+  ) => {
+    if (!user || !isAdmin) return;
 
-  setNdaMessage(null);
-  setNdaError(null);
+    setNdaMessage(null);
+    setNdaError(null);
 
-  try {
-    await updateDoc(doc(db, 'deals', dealId), {
-      status,
-      reviewStatus: status === 'published' ? 'approved' : status,
-      reviewedAt: serverTimestamp(),
-      reviewedBy: user.uid,
-      updatedAt: serverTimestamp(),
-      ...(status === 'published'
-        ? {
+    try {
+      await updateDoc(doc(db, 'deals', dealId), {
+        status,
+        reviewStatus: status === 'published' ? 'approved' : status,
+        reviewedAt: serverTimestamp(),
+        reviewedBy: user.uid,
+        updatedAt: serverTimestamp(),
+        ...(status === 'published'
+          ? {
             publishedAt: serverTimestamp(),
           }
-        : {}),
-    });
+          : {}),
+      });
 
-    await writeAuditLog({
-      actorUid: user.uid,
-      actorRole: profile?.role,
-      action: `deal_${status}`,
-      targetType: 'deal',
-      targetId: dealId,
-      dealId,
-    });
+      await writeAuditLog({
+        actorUid: user.uid,
+        actorRole: profile?.role,
+        action: `deal_${status}`,
+        targetType: 'deal',
+        targetId: dealId,
+        dealId,
+      });
 
-    setNdaMessage(
-      t('dashboard.messages.deal_moved', {
-        status: dealStatusLabel(status),
-      })
-    );
-  } catch (error: any) {
-    console.error('Deal moderation failed:', error);
-    setNdaError(
-      error instanceof Error
-        ? error.message
-        : t('dashboard.errors.deal_moderation_failed')
-    );
-  }
-};
+      setNdaMessage(
+        t('dashboard.messages.deal_moved', {
+          status: dealStatusLabel(status),
+        })
+      );
+    } catch (error: any) {
+      console.error('Deal moderation failed:', error);
+      setNdaError(
+        error instanceof Error
+          ? error.message
+          : t('dashboard.errors.deal_moderation_failed')
+      );
+    }
+  };
 
   const updateKycStatus = async (targetUid: string, status: 'verified' | 'rejected') => {
     if (!user || !isAdmin) return;
@@ -205,7 +205,7 @@ setNdaError(error instanceof Error ? error.message : t('dashboard.errors.nda_upd
           { icon: Clock, label: t('dashboard.stats.pending_actions'), value: pendingNdas, trend: t('dashboard.high_priority'), color: 'orange' },
           { icon: TrendingUp, label: t('dashboard.stats.pipeline_value'), value: '$58.5M', trend: '+2.4M', color: 'white' },
         ].map((metric, idx) => (
-          <motion.div 
+          <motion.div
             key={metric.label}
             initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: idx * 0.1 }}
             className="bg-slate-900/40 border border-slate-800/60 p-6 rounded-[2rem] space-y-4 relative overflow-hidden group hover:border-emerald-500/30 transition-all"
@@ -251,7 +251,7 @@ setNdaError(error instanceof Error ? error.message : t('dashboard.errors.nda_upd
 
           <div className="space-y-3">
             {displayDeals.map((deal) => (
-              <Link key={deal.id} to={`/deals/${deal.id}`} 
+              <Link key={deal.id} to={`/deals/${deal.id}`}
                 className="flex flex-col md:flex-row gap-6 p-6 bg-slate-900/30 border border-slate-800/60 rounded-3xl hover:border-emerald-500/40 hover:bg-slate-900/50 transition-all group relative overflow-hidden"
               >
                 <div className="flex-1 flex gap-5 items-center">
@@ -398,7 +398,7 @@ setNdaError(error instanceof Error ? error.message : t('dashboard.errors.nda_upd
                   console.warn('Invalid NDA record detected:', nda);
                   return null;
                 }
-                
+
                 return (
                   <div key={nda.id} className="p-8 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center bg-transparent hover:bg-slate-900/40 transition-colors">
                     <div className="lg:col-span-4 flex items-center gap-5">
@@ -411,19 +411,18 @@ setNdaError(error instanceof Error ? error.message : t('dashboard.errors.nda_upd
                       </div>
                     </div>
                     <div className="lg:col-span-3">
-                      <span className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-[0.2em] border ${
-                        nda.status === 'signed' ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-500' :
-                        nda.status === 'rejected' ? 'bg-red-500/10 border-red-500/30 text-red-500' :
-                        'bg-blue-500/10 border-blue-500/30 text-blue-500'
-                      }`}>
+                      <span className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-[0.2em] border ${nda.status === 'signed' ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-500' :
+                          nda.status === 'rejected' ? 'bg-red-500/10 border-red-500/30 text-red-500' :
+                            'bg-blue-500/10 border-blue-500/30 text-blue-500'
+                        }`}>
                         {ndaStatusLabel(nda.status)}
                       </span>
                     </div>
                     <div className="lg:col-span-5 flex justify-end items-center gap-4">
                       {isSeller && nda.status === 'requested' ? (
                         <div className="flex gap-2">
-                           <button onClick={() => updateNdaStatus(nda.id, 'rejected')} className="px-5 py-2.5 bg-slate-800 rounded-xl text-[10px] font-black uppercase text-red-400 hover:bg-red-500/20 transition-all">{t('dashboard.nda.deny')}</button>
-                           <button onClick={() => updateNdaStatus(nda.id, 'signed')} className="px-5 py-2.5 bg-white rounded-xl text-[10px] font-black uppercase text-slate-950 hover:bg-emerald-400 transition-all">{t('dashboard.nda.execute_sign')}</button>
+                          <button onClick={() => updateNdaStatus(nda.id, 'rejected')} className="px-5 py-2.5 bg-slate-800 rounded-xl text-[10px] font-black uppercase text-red-400 hover:bg-red-500/20 transition-all">{t('dashboard.nda.deny')}</button>
+                          <button onClick={() => updateNdaStatus(nda.id, 'signed')} className="px-5 py-2.5 bg-white rounded-xl text-[10px] font-black uppercase text-slate-950 hover:bg-emerald-400 transition-all">{t('dashboard.nda.execute_sign')}</button>
                         </div>
                       ) : (
                         <p className="text-[10px] uppercase font-black tracking-widest text-slate-600">

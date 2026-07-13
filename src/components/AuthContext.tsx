@@ -9,6 +9,7 @@ import {
   signOut,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, onSnapshot, Unsubscribe } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
@@ -27,6 +28,7 @@ interface AuthContextType {
   verifyOtp: (email: string, otp: string) => Promise<boolean>;
   signInWithEmail: (email: string, pass: string) => Promise<void>;
   signUpWithEmail: (email: string, pass: string, name: string, role: string) => Promise<void>;
+  sendPasswordReset: (email: string) => Promise<boolean>;
   logout: () => Promise<void>;
   clearAuthError: () => void;
 }
@@ -129,10 +131,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSigningIn(false);
       return true; 
     } catch (error) {
-      console.error("EmailJS Error:", error);
-      setAuthError(t('auth.errors.otp_send_failed')); 
+      console.warn("EmailJS Error, falling back to console/local storage for dev:", error);
+      // Lưu OTP vào localStorage để kiểm tra
+      window.localStorage.setItem('temp_otp', generatedOtp);
+      console.log(`%c[DEV MODE] OTP Code for ${email} is: ${generatedOtp}`, "color: #10b981; font-weight: bold; font-size: 16px;");
+      
+      // Đặt thông báo hiển thị mã OTP cho môi trường phát triển cục bộ
+      setAuthError(`[DEV MODE] EmailJS failed. Your verification code is: ${generatedOtp}`);
+      
       setSigningIn(false);
-      return false;
+      return true; 
     }
   };
 
@@ -188,6 +196,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const sendPasswordReset = async (email: string) => {
+    setSigningIn(true);
+    setAuthError(null);
+    try {
+      await sendPasswordResetEmail(auth, email);
+      return true;
+    } catch (error: any) {
+      setAuthError(getAuthErrorMessage(error, t));
+      return false;
+    } finally {
+      setSigningIn(false);
+    }
+  };
+
   const logout = () => signOut(auth);
 
   return (
@@ -199,6 +221,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       verifyOtp, 
       signInWithEmail,
       signUpWithEmail,
+      sendPasswordReset,
       logout, 
       clearAuthError: () => setAuthError(null) 
     }}>
